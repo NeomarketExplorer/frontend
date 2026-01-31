@@ -107,7 +107,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         return sig as string;
       };
 
-      const signedOrder = await signOrder(orderStruct, address, signTypedDataFn);
+      const signedOrder = await signOrder(orderStruct, address, signTypedDataFn, params.negRisk);
 
       // 5. Build POST body
       const body = buildOrderRequestBody(signedOrder, credentials.apiKey, params.orderType ?? 'GTC');
@@ -150,7 +150,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         if (text) {
           try {
             const parsed = JSON.parse(text);
-            message = parsed.errorMsg || parsed.message || message;
+            message = parsed.error || parsed.errorMsg || parsed.message || message;
           } catch {
             message = `${message}: ${text}`;
           }
@@ -163,7 +163,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
 
       const result = await res.json().catch(() => ({}));
       if (!result.success) {
-        throw new Error(result.errorMsg || result.message || 'Order was not accepted');
+        throw new Error(result.error || result.errorMsg || result.message || 'Order was not accepted');
       }
 
       return result.orderID || result.orderId;

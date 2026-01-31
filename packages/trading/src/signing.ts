@@ -3,13 +3,15 @@
  * Signs orders using the wallet's signTypedData capability
  */
 
-import { CTF_EXCHANGE_DOMAIN } from '@app/config';
+import { CTF_EXCHANGE_DOMAIN, NEG_RISK_CTF_EXCHANGE_DOMAIN } from '@app/config';
 import { type SignedOrder } from './orders';
+
+type ExchangeDomain = typeof CTF_EXCHANGE_DOMAIN | typeof NEG_RISK_CTF_EXCHANGE_DOMAIN;
 
 // Type definition for the signTypedData function (wallet-agnostic)
 export type SignTypedDataFn = (params: {
   account: string;
-  domain: typeof CTF_EXCHANGE_DOMAIN;
+  domain: ExchangeDomain;
   types: typeof ORDER_TYPES;
   primaryType: 'Order';
   message: Record<string, unknown>;
@@ -35,18 +37,21 @@ export const ORDER_TYPES = {
 
 /**
  * Sign an order using EIP-712 typed data via the wallet provider.
- * Uses CTF_EXCHANGE_DOMAIN (NOT ClobAuthDomain — different domain!).
  *
  * @param order - Order struct without signature
  * @param signerAddress - Address of the signer
  * @param signTypedDataFn - Wallet-provided signTypedData function
+ * @param negRisk - If true, uses Neg Risk CTF Exchange domain
  * @returns SignedOrder with signature attached
  */
 export async function signOrder(
   order: Omit<SignedOrder, 'signature'>,
   signerAddress: string,
-  signTypedDataFn: SignTypedDataFn
+  signTypedDataFn: SignTypedDataFn,
+  negRisk = false
 ): Promise<SignedOrder> {
+  const domain = negRisk ? NEG_RISK_CTF_EXCHANGE_DOMAIN : CTF_EXCHANGE_DOMAIN;
+
   const message: Record<string, unknown> = {
     salt: order.salt,
     maker: order.maker,
@@ -64,7 +69,7 @@ export async function signOrder(
 
   const signature = await signTypedDataFn({
     account: signerAddress,
-    domain: CTF_EXCHANGE_DOMAIN,
+    domain,
     types: ORDER_TYPES,
     primaryType: 'Order',
     message,

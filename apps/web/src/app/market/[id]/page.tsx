@@ -231,7 +231,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         <div>
-          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} />
+          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} />
         </div>
       </div>
     </div>
@@ -242,10 +242,12 @@ function TradePanel({
   outcomes,
   tokenId,
   mappedTokenIds,
+  negRisk,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   mappedTokenIds: string[];
+  negRisk: boolean;
 }) {
   const privyAvailable = usePrivyAvailable();
   const { data: orderbook } = useOrderbook(tokenId);
@@ -268,6 +270,7 @@ function TradePanel({
       tokenId={tokenId}
       orderbook={orderbook ?? null}
       liveMidpoints={liveMidpoints}
+      negRisk={negRisk}
     />
   );
 }
@@ -342,11 +345,13 @@ function TradePanelInner({
   tokenId,
   orderbook,
   liveMidpoints,
+  negRisk,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   orderbook: ParsedOrderbook | null;
   liveMidpoints: (number | null)[];
+  negRisk: boolean;
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
@@ -420,6 +425,7 @@ function TradePanelInner({
       price,
       size,
       orderType: isMarket ? 'FOK' : 'GTC',
+      negRisk,
     });
   };
 

@@ -18,6 +18,7 @@ export interface OrderParams {
   size: number; // Number of shares
   orderType?: OrderType;
   expiration?: number; // Unix timestamp for GTD orders
+  negRisk?: boolean; // True for multi-outcome markets (uses different exchange contract)
 }
 
 export interface SignedOrder {

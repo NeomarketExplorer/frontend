@@ -68,5 +68,13 @@ export const CTF_EXCHANGE_DOMAIN = {
   verifyingContract: '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E' as `0x${string}`,
 } as const;
 
+// EIP-712 domain for neg-risk (multi-outcome) markets
+export const NEG_RISK_CTF_EXCHANGE_DOMAIN = {
+  name: 'Polymarket CTF Exchange',
+  version: '1',
+  chainId: 137,
+  verifyingContract: '0xC5d563A36AE78145C45a50134d48A1215220f80a' as `0x${string}`,
+} as const;
+
 // Re-export zod for convenience
 export { z } from 'zod';

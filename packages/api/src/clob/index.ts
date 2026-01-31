@@ -55,6 +55,7 @@ export const ClobMarketSchema = z.object({
   question: z.string(),
   market_slug: z.string().optional(),
   minimum_tick_size: z.number().optional(),
+  neg_risk: z.boolean().optional(),
   tokens: z.array(ClobMarketTokenSchema),
 });
 
