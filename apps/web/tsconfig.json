@@ -1,0 +1,46 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@app/ui": [
+        "../../packages/ui/src"
+      ],
+      "@app/ui/*": [
+        "../../packages/ui/src/*"
+      ],
+      "@app/api": [
+        "../../packages/api/src"
+      ],
+      "@app/api/*": [
+        "../../packages/api/src/*"
+      ],
+      "@app/trading": [
+        "../../packages/trading/src"
+      ],
+      "@app/trading/*": [
+        "../../packages/trading/src/*"
+      ],
+      "@app/config": [
+        "../../packages/config/src"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

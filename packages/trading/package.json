@@ -1,0 +1,56 @@
+{
+  "name": "@app/trading",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./calculations": {
+      "types": "./src/calculations.ts",
+      "default": "./src/calculations.ts"
+    },
+    "./validation": {
+      "types": "./src/validation.ts",
+      "default": "./src/validation.ts"
+    },
+    "./orderbook": {
+      "types": "./src/orderbook.ts",
+      "default": "./src/orderbook.ts"
+    },
+    "./signing": {
+      "types": "./src/signing.ts",
+      "default": "./src/signing.ts"
+    },
+    "./pnl": {
+      "types": "./src/pnl.ts",
+      "default": "./src/pnl.ts"
+    },
+    "./contracts/*": {
+      "types": "./src/contracts/*.ts",
+      "default": "./src/contracts/*.ts"
+    },
+    "./wallet/*": {
+      "types": "./src/wallet/*.ts",
+      "default": "./src/wallet/*.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@app/config": "workspace:*",
+    "comlink": "^4.4.1",
+    "viem": "^2.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

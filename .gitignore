@@ -1,0 +1,42 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.next
+.turbo
+out
+
+# Cache
+*.tsbuildinfo
+.eslintcache
+.cache
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+playwright-report
+test-results
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.logs
+.pids
+
+# Misc
+*.pem
+.vercel
