@@ -5,11 +5,14 @@
 
 import { create } from 'zustand';
 
+type OrderMode = 'limit' | 'market';
+
 interface OrderFormState {
   side: 'BUY' | 'SELL';
   outcomeIndex: number;
   price: string;
   size: string;
+  mode: OrderMode;
 }
 
 interface TradingState {
@@ -23,6 +26,7 @@ interface TradingState {
   setOrderOutcome: (index: number) => void;
   setOrderPrice: (price: string) => void;
   setOrderSize: (size: string) => void;
+  setOrderMode: (mode: OrderMode) => void;
   resetOrderForm: () => void;
 
   // Orderbook settings
@@ -43,6 +47,7 @@ const defaultOrderForm: OrderFormState = {
   outcomeIndex: 0,
   price: '',
   size: '',
+  mode: 'market',
 };
 
 export const useTradingStore = create<TradingState>((set) => ({
@@ -60,6 +65,8 @@ export const useTradingStore = create<TradingState>((set) => ({
     set((state) => ({ orderForm: { ...state.orderForm, price } })),
   setOrderSize: (size) =>
     set((state) => ({ orderForm: { ...state.orderForm, size } })),
+  setOrderMode: (mode) =>
+    set((state) => ({ orderForm: { ...state.orderForm, mode } })),
   resetOrderForm: () => set({ orderForm: { ...defaultOrderForm } }),
 
   // Orderbook settings

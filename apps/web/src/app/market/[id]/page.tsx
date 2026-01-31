@@ -198,12 +198,13 @@ export default function MarketPage({ params }: MarketPageProps) {
 
 function TradePanel({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; tokenId: string | null }) {
   const privyAvailable = usePrivyAvailable();
+  const { data: orderbook } = useOrderbook(tokenId);
 
   if (!privyAvailable) {
     return <TradePanelDisabled outcomes={outcomes} />;
   }
 
-  return <TradePanelInner outcomes={outcomes} tokenId={tokenId} />;
+  return <TradePanelInner outcomes={outcomes} tokenId={tokenId} orderbook={orderbook ?? null} />;
 }
 
 function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
@@ -256,11 +257,35 @@ function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
   );
 }
 
-function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; tokenId: string | null }) {
-  const { orderForm, setOrderSide, setOrderPrice, setOrderSize } = useTradingStore();
+interface ParsedOrderbook {
+  bids: Array<{ price: number; size: number }>;
+  asks: Array<{ price: number; size: number }>;
+}
+
+const MARKET_ORDER_SLIPPAGE = 3; // 3 cents slippage buffer
+
+function TradePanelInner({
+  outcomes,
+  tokenId,
+  orderbook,
+}: {
+  outcomes: OutcomeEntry[];
+  tokenId: string | null;
+  orderbook: ParsedOrderbook | null;
+}) {
+  const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
   const { balance, allowance, isLoading: balanceLoading } = useUsdcBalance();
   const { approve, isApproving, error: approvalError } = useTokenApproval();
+
+  const isMarket = orderForm.mode === 'market';
+
+  // For market orders, compute price from orderbook
+  const bestAsk = orderbook?.asks[0]?.price ?? 0;
+  const bestBid = orderbook?.bids[0]?.price ?? 0;
+  const marketPrice = orderForm.side === 'BUY'
+    ? Math.min(bestAsk * 100 + MARKET_ORDER_SLIPPAGE, 99)
+    : Math.max(bestBid * 100 - MARKET_ORDER_SLIPPAGE, 1);
 
   const placeOrder = usePlaceOrder({
     onSuccess: (orderId) => {
@@ -271,7 +296,7 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
     },
   });
 
-  const price = parseFloat(orderForm.price) || 0;
+  const price = isMarket ? marketPrice : (parseFloat(orderForm.price) || 0);
   const size = parseFloat(orderForm.size) || 0;
   const orderEstimate = price > 0 && size > 0 && tokenId
     ? calculateOrderEstimate({
@@ -285,6 +310,7 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
   const estimatedCost = orderEstimate?.cost ?? 0;
   const needsApproval = isConnected && allowance < estimatedCost && estimatedCost > 0;
   const insufficientBalance = isConnected && balance < estimatedCost && estimatedCost > 0;
+  const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
 
   const handlePlaceOrder = () => {
     if (!tokenId || !price || !size) return;
@@ -293,6 +319,7 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
       side: orderForm.side,
       price,
       size,
+      orderType: isMarket ? 'FOK' : 'GTC',
     });
   };
 
@@ -309,6 +336,30 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Limit / Market toggle */}
+        <div className="grid grid-cols-2 gap-1 p-0.5 bg-muted/50 rounded-md">
+          <button
+            className={`text-xs font-mono py-1.5 rounded transition-colors ${
+              isMarket
+                ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                : 'text-muted-foreground hover:text-[var(--foreground)]'
+            }`}
+            onClick={() => setOrderMode('market')}
+          >
+            Market
+          </button>
+          <button
+            className={`text-xs font-mono py-1.5 rounded transition-colors ${
+              !isMarket
+                ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                : 'text-muted-foreground hover:text-[var(--foreground)]'
+            }`}
+            onClick={() => setOrderMode('limit')}
+          >
+            Limit
+          </button>
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
           {outcomes.map((outcome, i) => {
             const isSelected = orderForm.outcomeIndex === i;
@@ -352,17 +403,32 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
           </Button>
         </div>
 
-        <div>
-          <label className="text-sm font-medium mb-1.5 block">Price (c)</label>
-          <Input
-            type="number"
-            placeholder="50"
-            min="1"
-            max="99"
-            value={orderForm.price}
-            onChange={(e) => setOrderPrice(e.target.value)}
-          />
-        </div>
+        {isMarket ? (
+          <div className="bg-muted/50 rounded-lg p-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">
+                {orderForm.side === 'BUY' ? 'Best Ask' : 'Best Bid'}
+              </span>
+              <span className="font-mono">
+                {noLiquidity
+                  ? 'No liquidity'
+                  : `${(orderForm.side === 'BUY' ? bestAsk * 100 : bestBid * 100).toFixed(1)}c`}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Price (c)</label>
+            <Input
+              type="number"
+              placeholder="50"
+              min="1"
+              max="99"
+              value={orderForm.price}
+              onChange={(e) => setOrderPrice(e.target.value)}
+            />
+          </div>
+        )}
 
         <div>
           <label className="text-sm font-medium mb-1.5 block">Shares</label>
@@ -415,13 +481,13 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
             className="w-full"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-            disabled={!isConnected || !tokenId || !price || !size || placeOrder.isPending || insufficientBalance}
+            disabled={!isConnected || !tokenId || !size || placeOrder.isPending || insufficientBalance || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
             {placeOrder.isPending
               ? 'Placing Order...'
               : isConnected
-                ? `${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
+                ? `${isMarket ? 'Market ' : ''}${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
                 : 'Connect Wallet to Trade'}
           </Button>
         )}
