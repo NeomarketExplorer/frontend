@@ -322,6 +322,7 @@ function TradePanelInner({
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
 
   const handlePlaceOrder = () => {
+    if (placeOrder.isPending) return;
     if (!tokenId || !price || !size) return;
     placeOrder.mutate({
       tokenId,

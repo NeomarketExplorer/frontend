@@ -135,13 +135,22 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       });
 
       if (!res.ok) {
-        const error = await res.json().catch(() => ({ errorMsg: 'Order submission failed' }));
-        throw new Error(error.errorMsg || error.message || 'Failed to submit order');
+        const text = await res.text().catch(() => '');
+        let message = `Order submission failed (${res.status})`;
+        if (text) {
+          try {
+            const parsed = JSON.parse(text);
+            message = parsed.errorMsg || parsed.message || message;
+          } catch {
+            message = `${message}: ${text}`;
+          }
+        }
+        throw new Error(message);
       }
 
-      const result = await res.json();
+      const result = await res.json().catch(() => ({}));
       if (!result.success) {
-        throw new Error(result.errorMsg || 'Order was not accepted');
+        throw new Error(result.errorMsg || result.message || 'Order was not accepted');
       }
 
       return result.orderID || result.orderId;
