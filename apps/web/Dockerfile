@@ -29,6 +29,11 @@ COPY tsconfig.base.json ./
 
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# NEXT_PUBLIC_* vars are inlined at build time
+ARG NEXT_PUBLIC_PRIVY_APP_ID
+ENV NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID
+
 RUN pnpm build
 
 # Production runner
