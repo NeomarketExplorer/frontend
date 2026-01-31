@@ -275,7 +275,14 @@ function TradePanelInner({
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
-  const { balance, allowance, walletBalance, balanceSource, isLoading: balanceLoading } = useUsdcBalance();
+  const {
+    balance,
+    allowance,
+    walletBalance,
+    onChainAllowance,
+    balanceSource,
+    isLoading: balanceLoading,
+  } = useUsdcBalance();
   const { approve, isApproving, error: approvalError } = useTokenApproval();
 
   const isMarket = orderForm.mode === 'market';
@@ -308,8 +315,10 @@ function TradePanelInner({
     : null;
 
   const estimatedCost = orderEstimate?.cost ?? 0;
-  const needsApproval = isConnected && allowance < estimatedCost && estimatedCost > 0;
-  const insufficientBalance = isConnected && balance < estimatedCost && estimatedCost > 0;
+  const effectiveAllowance = Math.max(allowance, onChainAllowance ?? 0);
+  const effectiveBalance = balance > 0 ? balance : (walletBalance ?? balance);
+  const needsApproval = isConnected && effectiveAllowance < estimatedCost && estimatedCost > 0;
+  const insufficientBalance = isConnected && effectiveBalance < estimatedCost && estimatedCost > 0;
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
 
   const handlePlaceOrder = () => {

@@ -17,6 +17,7 @@ import { useEffect } from 'react';
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
 const CLOB_API_URL = '/api/clob';
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
+const CTF_EXCHANGE = CHAIN_CONFIG.polygon.ctfExchange;
 const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
 
 let publicClient: ReturnType<typeof createPublicClient> | null = null;
@@ -36,6 +37,7 @@ interface BalanceAllowance {
   rawBalance: string;    // Raw balance string from API
   rawAllowance: string;  // Raw allowance string from API
   walletBalance?: number; // On-chain USDC balance (fallback/display)
+  onChainAllowance?: number; // On-chain allowance for CTF Exchange (fallback/display)
   balanceSource: 'clob' | 'onchain';
 }
 
@@ -50,18 +52,33 @@ async function fetchOnChainBalance(address: string): Promise<number> {
   return Number(formatUnits(balance, 6));
 }
 
+async function fetchOnChainAllowance(address: string): Promise<number> {
+  const client = getPublicClient();
+  const allowance = await client.readContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [address as `0x${string}`, CTF_EXCHANGE],
+  });
+  return Number(formatUnits(allowance, 6));
+}
+
 async function fetchBalanceAllowance(
   address: string,
   credentials: { apiKey: string; secret: string; passphrase: string } | null
 ): Promise<BalanceAllowance> {
   if (!credentials) {
-    const walletBalance = await fetchOnChainBalance(address);
+    const [walletBalance, onChainAllowance] = await Promise.all([
+      fetchOnChainBalance(address),
+      fetchOnChainAllowance(address),
+    ]);
     return {
       balance: walletBalance,
       allowance: 0,
       rawBalance: '0',
       rawAllowance: '0',
       walletBalance,
+      onChainAllowance,
       balanceSource: 'onchain',
     };
   }
@@ -89,11 +106,18 @@ async function fetchBalanceAllowance(
     const balance = parseFloat(data.balance ?? '0') / 1e6;
 
     let walletBalance: number | undefined;
+    let onChainAllowance: number | undefined;
     if (balance === 0) {
       try {
-        walletBalance = await fetchOnChainBalance(address);
+        const results = await Promise.all([
+          fetchOnChainBalance(address),
+          fetchOnChainAllowance(address),
+        ]);
+        walletBalance = results[0];
+        onChainAllowance = results[1];
       } catch {
         walletBalance = undefined;
+        onChainAllowance = undefined;
       }
     }
 
@@ -103,16 +127,21 @@ async function fetchBalanceAllowance(
       rawBalance: data.balance ?? '0',
       rawAllowance: data.allowance ?? '0',
       walletBalance,
+      onChainAllowance,
       balanceSource: 'clob',
     };
   } catch (err) {
-    const walletBalance = await fetchOnChainBalance(address);
+    const [walletBalance, onChainAllowance] = await Promise.all([
+      fetchOnChainBalance(address),
+      fetchOnChainAllowance(address),
+    ]);
     return {
       balance: walletBalance,
       allowance: 0,
       rawBalance: '0',
       rawAllowance: '0',
       walletBalance,
+      onChainAllowance,
       balanceSource: 'onchain',
     };
   }
@@ -120,7 +149,7 @@ async function fetchBalanceAllowance(
 
 /**
  * Fetches USDC balance and allowance from CLOB API.
- * - Enabled only when address + L2 credentials exist
+ * - Enabled when address exists; falls back to on-chain balance/allowance
  * - 30s refetch interval
  * - Updates wallet-store.usdcBalance on success
  */
@@ -149,6 +178,7 @@ export function useUsdcBalance() {
     rawBalance: query.data?.rawBalance ?? '0',
     rawAllowance: query.data?.rawAllowance ?? '0',
     walletBalance: query.data?.walletBalance,
+    onChainAllowance: query.data?.onChainAllowance,
     balanceSource: query.data?.balanceSource ?? 'clob',
     isLoading: query.isLoading,
     error: query.error,

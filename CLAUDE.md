@@ -156,7 +156,8 @@ GET /data/order/{id}         # Get single order by ID
 GET /balance-allowance       # Check USDC balance + token allowance (?signature_type=0)
 
 Note: CLOB balance may differ from on-chain wallet balance. UI shows wallet balance
-as a fallback (even before L2 creds exist), but trading uses the CLOB balance/allowance.
+and on-chain allowance as fallbacks (even before L2 creds exist) so users aren’t
+blocked after approval. Orders still use CLOB auth and can fail if CLOB rejects.
 
 # Read-only (no auth)
 GET /book                    # Orderbook (?token_id=)
@@ -339,7 +340,7 @@ This is the critical path. Nothing else matters if users can't trade.
 | 5.3 | L2 credential derivation | First try `GET /auth/derive-api-key` with L1 headers (returning user). On failure, call `POST /auth/api-key` (new user). Both return `{ apiKey, secret, passphrase }`. Store in Zustand (memory only). Clear on disconnect. Re-derive on wallet change or reconnect. |
 | 5.4 | Implement order signing | Replace placeholder in `packages/trading/src/signing.ts`. Sign EIP-712 Order struct via `eth_signTypedData_v4`. Domain: `{ name: "Polymarket CTF Exchange", version: "1", chainId: 137, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" }`. Note: this is a DIFFERENT domain than L1 auth (ClobAuthDomain). signatureType: 0 (EOA). |
 | 5.5 | Wire up order submission | Rewrite `usePlaceOrder`: (1) validate params, (2) build + sign EIP-712 Order, (3) construct POST body: `{ order: signedOrder, owner: userApiKey, orderType: "GTC" }`, (4) generate L2 HMAC headers for the request, (5) call `/api/polymarket/sign` for builder HMAC headers, (6) merge L2 + builder headers, (7) POST to `/api/clob/order` (proxy to CLOB). Handle `{ success, orderId, errorMsg }` response. |
-| 5.6 | USDC balance + allowance | Use CLOB endpoint `GET /balance-allowance?signature_type=0` (L2 auth) — returns balance AND allowance in one call. Also query on-chain via viem as fallback (display-only; trading uses CLOB balance). Update `wallet-store.usdcBalance`. Refresh on connect, after trades, on 30s interval. |
+| 5.6 | USDC balance + allowance | Use CLOB endpoint `GET /balance-allowance?signature_type=0` (L2 auth) — returns balance AND allowance in one call. Also query on-chain via viem as fallback for balance/allowance (display + gating so approvals unlock UI). Update `wallet-store.usdcBalance`. Refresh on connect, after trades, on 30s interval. |
 | 5.7 | Token approval flow | If allowance from 5.6 is insufficient, prompt user to approve USDC for CTF Exchange (`0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`). Send approval TX via Privy wallet provider. Show TX status. Approvals needed: USDC → CTF Exchange, USDC → Neg Risk CTF Exchange (if applicable). |
 | 5.8 | Gnosis Safe deployment (defer) | Use `@polymarket/builder-relayer-client` to deploy Safe per user for gasless trading. **Defer to Sprint 5b** — EOA trading works without it, users just pay their own Polygon gas (fractions of a cent). Implement once core trading flow is validated. |
 
