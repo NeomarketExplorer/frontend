@@ -43,11 +43,27 @@ export const PriceHistoryPointSchema = z.object({
   p: z.number(),
 });
 
+export const ClobMarketTokenSchema = z.object({
+  token_id: z.string(),
+  outcome: z.string(),
+  price: z.number().optional(),
+  winner: z.boolean().optional(),
+});
+
+export const ClobMarketSchema = z.object({
+  condition_id: z.string(),
+  question: z.string(),
+  market_slug: z.string().optional(),
+  minimum_tick_size: z.number().optional(),
+  tokens: z.array(ClobMarketTokenSchema),
+});
+
 export type OrderbookLevel = z.infer<typeof OrderbookLevelSchema>;
 export type Orderbook = z.infer<typeof OrderbookSchema>;
 export type Trade = z.infer<typeof TradeSchema>;
 export type Midpoint = z.infer<typeof MidpointSchema>;
 export type PriceHistoryPoint = z.infer<typeof PriceHistoryPointSchema>;
+export type ClobMarket = z.infer<typeof ClobMarketSchema>;
 
 export interface OrderbookParams {
   token_id: string;
@@ -121,6 +137,13 @@ export class ClobClient {
       { params: { market, interval, fidelity } }
     );
     return result.history ?? [];
+  }
+
+  /**
+   * Get market metadata by condition ID (includes outcome token mapping)
+   */
+  async getMarket(conditionId: string): Promise<ClobMarket> {
+    return this.client.get(`/markets/${conditionId}`, undefined, ClobMarketSchema);
   }
 
   /**

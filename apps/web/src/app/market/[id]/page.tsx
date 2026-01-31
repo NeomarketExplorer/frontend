@@ -26,6 +26,7 @@ import {
   usePlaceOrder,
   useUsdcBalance,
   useTokenApproval,
+  useClobMarket,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate } from '@app/trading';
@@ -55,27 +56,40 @@ export default function MarketPage({ params }: MarketPageProps) {
   const tokenIdB = outcomeTokenIds[1] ?? null;
   const { data: midpointA } = useMidpoint(tokenIdA);
   const { data: midpointB } = useMidpoint(tokenIdB);
+  const { data: clobMarket } = useClobMarket(market?.conditionId ?? null);
 
   const mappedTokenIds = useMemo(() => {
-    if (!outcomeTokenIds.length || outcomes.length === 0) return outcomeTokenIds;
-    if (outcomeTokenIds.length !== 2 || outcomes.length !== 2) return outcomeTokenIds;
+    if (outcomes.length === 0) return outcomeTokenIds;
 
-    const yesEntry = outcomes.find((entry) => isYesOutcome(entry.label));
-    const noEntry = outcomes.find((entry) => isNoOutcome(entry.label));
-    if (!yesEntry || !noEntry) return outcomeTokenIds;
-    if (midpointA == null || midpointB == null || yesEntry.price == null) return outcomeTokenIds;
+    // Prefer CLOB market token mapping (authoritative outcome ↔ token_id)
+    if (clobMarket?.tokens?.length) {
+      return outcomes.map((entry, index) => {
+        const match = clobMarket.tokens.find((token) =>
+          token.outcome?.trim().toLowerCase() === entry.label.trim().toLowerCase()
+        );
+        return match?.token_id ?? outcomeTokenIds[index];
+      });
+    }
 
-    const distA = Math.abs(midpointA - yesEntry.price);
-    const distB = Math.abs(midpointB - yesEntry.price);
-    const yesToken = distA <= distB ? outcomeTokenIds[0] : outcomeTokenIds[1];
-    const noToken = yesToken === outcomeTokenIds[0] ? outcomeTokenIds[1] : outcomeTokenIds[0];
+    // Fallback: try to infer YES/NO mapping from midpoints vs snapshot price
+    if (outcomeTokenIds.length === 2 && outcomes.length === 2) {
+      const yesEntry = outcomes.find((entry) => isYesOutcome(entry.label));
+      const noEntry = outcomes.find((entry) => isNoOutcome(entry.label));
+      if (yesEntry && noEntry && midpointA != null && midpointB != null && yesEntry.price != null) {
+        const distA = Math.abs(midpointA - yesEntry.price);
+        const distB = Math.abs(midpointB - yesEntry.price);
+        const yesToken = distA <= distB ? outcomeTokenIds[0] : outcomeTokenIds[1];
+        const noToken = yesToken === outcomeTokenIds[0] ? outcomeTokenIds[1] : outcomeTokenIds[0];
+        return outcomes.map((entry, index) => {
+          if (isYesOutcome(entry.label)) return yesToken;
+          if (isNoOutcome(entry.label)) return noToken;
+          return outcomeTokenIds[index];
+        });
+      }
+    }
 
-    return outcomes.map((entry, index) => {
-      if (isYesOutcome(entry.label)) return yesToken;
-      if (isNoOutcome(entry.label)) return noToken;
-      return outcomeTokenIds[index];
-    });
-  }, [outcomeTokenIds, outcomes, midpointA, midpointB]);
+    return outcomeTokenIds;
+  }, [outcomeTokenIds, outcomes, midpointA, midpointB, clobMarket]);
 
   const tokenId = mappedTokenIds[orderForm.outcomeIndex] ?? null;
   const { data: orderbook, isLoading: orderbookLoading } = useOrderbook(tokenId);
