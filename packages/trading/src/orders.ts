@@ -105,19 +105,24 @@ export function buildOrderStruct(
 }
 
 /**
- * Generate a random salt for orders
+ * Generate a random salt for orders (decimal string, not hex).
+ * Polymarket API expects parseInt(salt, 10) to work correctly.
  */
 function generateSalt(): string {
-  const randomBytes = new Uint8Array(32);
+  const randomBytes = new Uint8Array(16); // 128 bits is plenty of entropy
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(randomBytes);
   } else {
-    // Fallback for non-browser environments
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < 16; i++) {
       randomBytes[i] = Math.floor(Math.random() * 256);
     }
   }
-  return '0x' + Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  // Convert to a BigInt then to decimal string
+  let value = 0n;
+  for (const byte of randomBytes) {
+    value = (value << 8n) | BigInt(byte);
+  }
+  return value.toString();
 }
 
 /**
@@ -182,6 +187,8 @@ export function validateOrderParams(params: OrderParams): { valid: boolean; erro
 
   if (params.price < 1 || params.price > 99) {
     errors.push('Price must be between 1 and 99 cents');
+  } else if (!Number.isInteger(params.price)) {
+    errors.push('Price must be a whole number of cents');
   }
 
   if (params.size <= 0) {

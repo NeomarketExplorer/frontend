@@ -15,7 +15,8 @@ import {
 } from '@app/trading';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 
-const CLOB_API_URL = 'https://clob.polymarket.com';
+// Route through our proxy to avoid CORS issues with custom POLY_* headers
+const CLOB_API_URL = '/api/clob';
 
 /**
  * Derives or creates CLOB L2 credentials on wallet connect.

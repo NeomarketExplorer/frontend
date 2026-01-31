@@ -56,9 +56,9 @@ export async function hmacSign(
   const encoder = new TextEncoder();
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
 
-  // Convert to URL-safe base64
+  // Convert to URL-safe base64 (keep '=' padding per Polymarket spec)
   const base64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return base64.replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 /** Build L2 auth headers for per-user CLOB requests */

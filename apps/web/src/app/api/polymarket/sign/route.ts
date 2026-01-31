@@ -83,9 +83,9 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
 
-    // URL-safe base64
+    // URL-safe base64 (keep '=' padding per Polymarket spec)
     const base64Sig = btoa(String.fromCharCode(...new Uint8Array(sig)));
-    const urlSafeSig = base64Sig.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const urlSafeSig = base64Sig.replace(/\+/g, '-').replace(/\//g, '_');
 
     return NextResponse.json({
       POLY_BUILDER_SIGNATURE: urlSafeSig,

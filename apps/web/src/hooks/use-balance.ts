@@ -11,7 +11,8 @@ import { signClobRequest } from '@app/trading';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 import { useEffect } from 'react';
 
-const CLOB_API_URL = 'https://clob.polymarket.com';
+// Route through our proxy to avoid CORS issues with custom POLY_* headers
+const CLOB_API_URL = '/api/clob';
 
 interface BalanceAllowance {
   balance: number;       // USDC balance (human-readable, 6 decimals converted)

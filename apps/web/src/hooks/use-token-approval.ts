@@ -62,6 +62,15 @@ export function useTokenApproval(): UseTokenApprovalResult {
     try {
       const provider = await wallet.getEthereumProvider();
 
+      // Ensure wallet is on Polygon (chain ID 137 = 0x89)
+      const chainId = (await provider.request({ method: 'eth_chainId' })) as string;
+      if (chainId !== '0x89') {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x89' }],
+        });
+      }
+
       const hash = (await provider.request({
         method: 'eth_sendTransaction',
         params: [

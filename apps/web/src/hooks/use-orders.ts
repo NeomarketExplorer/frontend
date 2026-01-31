@@ -21,7 +21,8 @@ import {
 import { CTF_EXCHANGE_DOMAIN } from '@app/config';
 import { useWalletStore, useClobCredentialStore } from '@/stores';
 
-const CLOB_API_URL = 'https://clob.polymarket.com';
+// Route through our proxy to avoid CORS issues with custom POLY_* headers
+const CLOB_API_URL = '/api/clob';
 
 interface UseOrderOptions {
   onSuccess?: (orderId: string) => void;
