@@ -265,18 +265,18 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
       if (params?.market) searchParams.set('market', params.market);
       if (params?.assetId) searchParams.set('asset_id', params.assetId);
       const qs = searchParams.toString();
-      const basePath = '/data/orders';
-      const requestPath = `${basePath}${qs ? `?${qs}` : ''}`;
+      const signPath = '/data/orders';
+      const requestUrl = `${signPath}${qs ? `?${qs}` : ''}`;
 
-      // L2 HMAC must sign the full request path including query params
+      // L2 HMAC signs path only (no query params) — per official Polymarket CLOB clients
       const l2Headers = await signClobRequest(
         credentials,
         address,
         'GET',
-        requestPath
+        signPath
       );
 
-      const res = await fetchClob(requestPath, {
+      const res = await fetchClob(requestUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

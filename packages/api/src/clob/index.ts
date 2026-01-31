@@ -151,9 +151,10 @@ export class ClobClient {
    */
   async getSpread(tokenId: string): Promise<{ bid: number | null; ask: number | null; spread: number | null }> {
     const orderbook = await this.getOrderbook(tokenId);
+    const parsed = this.parseOrderbook(orderbook);
 
-    const bestBid = orderbook.bids[0] ? parseFloat(orderbook.bids[0].price) : null;
-    const bestAsk = orderbook.asks[0] ? parseFloat(orderbook.asks[0].price) : null;
+    const bestBid = parsed.bids[0]?.price ?? null;
+    const bestAsk = parsed.asks[0]?.price ?? null;
     const spread = bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
 
     return { bid: bestBid, ask: bestAsk, spread };
@@ -167,14 +168,14 @@ export class ClobClient {
     asks: Array<{ price: number; size: number }>;
   } {
     return {
-      bids: orderbook.bids.map(l => ({
-        price: parseFloat(l.price),
-        size: parseFloat(l.size),
-      })),
-      asks: orderbook.asks.map(l => ({
-        price: parseFloat(l.price),
-        size: parseFloat(l.size),
-      })),
+      // Bids sorted descending (best/highest first)
+      bids: orderbook.bids
+        .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
+        .sort((a, b) => b.price - a.price),
+      // Asks sorted ascending (best/lowest first)
+      asks: orderbook.asks
+        .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
+        .sort((a, b) => a.price - b.price),
     };
   }
 }

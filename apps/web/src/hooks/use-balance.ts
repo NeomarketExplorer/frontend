@@ -83,15 +83,16 @@ async function fetchBalanceAllowance(
       balanceSource: 'onchain',
     };
   }
-  const requestPath = '/balance-allowance?signature_type=0';
+  // L2 HMAC signs path only (no query params) — confirmed from official Polymarket CLOB clients
+  const signPath = '/balance-allowance';
+  const requestUrl = '/balance-allowance?signature_type=0';
 
-  // L2 HMAC must sign the full request path including query params
-  const headers = await signClobRequest(credentials, address, 'GET', requestPath);
+  const headers = await signClobRequest(credentials, address, 'GET', signPath);
 
   try {
     let res: Response;
     try {
-      res = await fetch(`${DIRECT_CLOB_API_URL}${requestPath}`, {
+      res = await fetch(`${DIRECT_CLOB_API_URL}${requestUrl}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -99,7 +100,7 @@ async function fetchBalanceAllowance(
         },
       });
     } catch {
-      res = await fetch(`${PROXY_CLOB_API_URL}${requestPath}`, {
+      res = await fetch(`${PROXY_CLOB_API_URL}${requestUrl}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
