@@ -155,6 +155,9 @@ export function usePlaceOrder(options?: UseOrderOptions) {
             message = `${message}: ${text}`;
           }
         }
+        if (res.status === 401 && message.toLowerCase().includes('api key')) {
+          useClobCredentialStore.getState().clearCredentials();
+        }
         throw new Error(message);
       }
 

@@ -84,8 +84,18 @@ export function buildOrderRequestBody(
   ownerApiKey: string,
   orderType: string = 'GTC'
 ) {
+  const salt =
+    typeof signedOrder.salt === 'string' && signedOrder.salt.startsWith('0x')
+      ? BigInt(signedOrder.salt).toString(10)
+      : signedOrder.salt;
+  const side = signedOrder.side === 0 ? 'BUY' : 'SELL';
+
   return {
-    order: signedOrder,
+    order: {
+      ...signedOrder,
+      salt,
+      side,
+    },
     owner: ownerApiKey,
     orderType,
   };

@@ -111,6 +111,9 @@ async function fetchBalanceAllowance(
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      if (res.status === 401) {
+        useClobCredentialStore.getState().clearCredentials();
+      }
       throw new Error(`Balance fetch failed (${res.status}): ${text}`);
     }
 
