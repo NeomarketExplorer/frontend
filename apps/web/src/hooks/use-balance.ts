@@ -87,7 +87,7 @@ async function fetchBalanceAllowance(
   const params = '?signature_type=0';
   const fullPath = `${path}${params}`;
 
-  const headers = await signClobRequest(credentials, address, 'GET', fullPath);
+  const headers = await signClobRequest(credentials, address, 'GET', path);
 
   try {
     let res: Response;

@@ -265,7 +265,8 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
       if (params?.market) searchParams.set('market', params.market);
       if (params?.assetId) searchParams.set('asset_id', params.assetId);
       const qs = searchParams.toString();
-      const path = `/data/orders${qs ? `?${qs}` : ''}`;
+      const path = '/data/orders';
+      const fullPath = `${path}${qs ? `?${qs}` : ''}`;
 
       const l2Headers = await signClobRequest(
         credentials,
@@ -274,7 +275,7 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
         path
       );
 
-      const res = await fetchClob(path, {
+      const res = await fetchClob(fullPath, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

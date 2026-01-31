@@ -105,24 +105,25 @@ export function buildOrderStruct(
 }
 
 /**
- * Generate a random salt for orders (decimal string, not hex).
+ * Generate a random salt for orders (decimal string, safe integer).
  * Polymarket API expects parseInt(salt, 10) to work correctly.
  */
 function generateSalt(): string {
-  const randomBytes = new Uint8Array(16); // 128 bits is plenty of entropy
+  const randomBytes = new Uint8Array(8);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(randomBytes);
   } else {
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 8; i++) {
       randomBytes[i] = Math.floor(Math.random() * 256);
     }
   }
-  // Convert to a BigInt then to decimal string
+  // Convert to a BigInt then clamp to 53-bit safe integer
   let value = 0n;
   for (const byte of randomBytes) {
     value = (value << 8n) | BigInt(byte);
   }
-  return value.toString();
+  const mask = (1n << 53n) - 1n;
+  return (value & mask).toString();
 }
 
 /**
