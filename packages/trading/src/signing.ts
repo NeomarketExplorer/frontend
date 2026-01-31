@@ -98,11 +98,25 @@ export function buildOrderRequestBody(
     );
   }
 
+  // CLOB POST body expects side as string "BUY"/"SELL", not the numeric EIP-712 value
+  const side = signedOrder.side === 0 ? 'BUY' : 'SELL';
+
   return {
     deferExec: false,
     order: {
-      ...signedOrder,
       salt,
+      maker: signedOrder.maker,
+      signer: signedOrder.signer,
+      taker: signedOrder.taker,
+      tokenId: signedOrder.tokenId,
+      makerAmount: signedOrder.makerAmount,
+      takerAmount: signedOrder.takerAmount,
+      expiration: signedOrder.expiration,
+      nonce: signedOrder.nonce,
+      feeRateBps: signedOrder.feeRateBps,
+      side,
+      signatureType: signedOrder.signatureType,
+      signature: signedOrder.signature,
     },
     owner: ownerApiKey,
     orderType,

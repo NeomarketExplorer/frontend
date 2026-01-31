@@ -63,12 +63,20 @@ export function useSpread(tokenId: string | null) {
 }
 
 /**
- * Fetch recent trades for a token
+ * Fetch recent trades for a token.
+ * Note: CLOB /trades now requires L2 auth — returns [] on failure.
  */
 export function useTrades(tokenId: string | null, limit = 50) {
   return useQuery({
     queryKey: [...orderbookKeys.trades(tokenId ?? ''), limit],
-    queryFn: () => (tokenId ? clobClient.getTrades(tokenId, limit) : []),
+    queryFn: async () => {
+      if (!tokenId) return [];
+      try {
+        return await clobClient.getTrades(tokenId, limit);
+      } catch {
+        return [];
+      }
+    },
     enabled: !!tokenId,
     staleTime: 10 * 1000,
     refetchInterval: 30 * 1000,

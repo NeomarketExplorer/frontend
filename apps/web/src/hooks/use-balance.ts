@@ -85,7 +85,7 @@ async function fetchBalanceAllowance(
   }
   // L2 HMAC signs path only (no query params) — confirmed from official Polymarket CLOB clients
   const signPath = '/balance-allowance';
-  const requestUrl = '/balance-allowance?signature_type=0';
+  const requestUrl = '/balance-allowance?asset_type=COLLATERAL&signature_type=0';
 
   const headers = await signClobRequest(credentials, address, 'GET', signPath);
 
