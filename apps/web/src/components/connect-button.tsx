@@ -6,6 +6,7 @@ import { useWalletStore } from '@/stores';
 import { usePrivyAvailable } from '@/providers/privy-provider';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useUsdcBalance } from '@/hooks/use-balance';
 
 export function ConnectButton() {
   const privyAvailable = usePrivyAvailable();
@@ -29,6 +30,7 @@ export function ConnectButton() {
 function ConnectButtonInner() {
   const { isReady, isAuthenticated, login, logout } = useAuth();
   const { address, isConnecting, softDisconnected, softDisconnect, resume } = useWalletStore();
+  const { balance } = useUsdcBalance();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -83,6 +85,9 @@ function ConnectButtonInner() {
           size="sm"
           onClick={() => setMenuOpen((open) => !open)}
         >
+          {balance > 0 && (
+            <span className="text-muted-foreground mr-1.5">${balance.toFixed(2)}</span>
+          )}
           {formatAddress(address)}
         </Button>
         {menuOpen && (

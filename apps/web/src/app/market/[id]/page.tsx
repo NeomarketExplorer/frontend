@@ -14,6 +14,7 @@ import {
   TabsContent,
   Badge,
   Input,
+  toast,
 } from '@app/ui';
 import {
   useMarket,
@@ -22,6 +23,8 @@ import {
   useTrades,
   useRealtimeOrderbook,
   usePlaceOrder,
+  useUsdcBalance,
+  useTokenApproval,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate } from '@app/trading';
@@ -256,13 +259,15 @@ function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
 function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; tokenId: string | null }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize } = useTradingStore();
   const { isConnected } = useWalletStore();
+  const { balance, allowance, isLoading: balanceLoading } = useUsdcBalance();
+  const { approve, isApproving, error: approvalError } = useTokenApproval();
 
   const placeOrder = usePlaceOrder({
     onSuccess: (orderId) => {
-      console.log('Order placed:', orderId);
+      toast({ variant: 'success', title: 'Order placed', description: `Order ID: ${orderId}` });
     },
     onError: (error) => {
-      console.error('Order failed:', error);
+      toast({ variant: 'error', title: 'Order failed', description: error.message });
     },
   });
 
@@ -277,6 +282,10 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
       })
     : null;
 
+  const estimatedCost = orderEstimate?.cost ?? 0;
+  const needsApproval = isConnected && allowance < estimatedCost && estimatedCost > 0;
+  const insufficientBalance = isConnected && balance < estimatedCost && estimatedCost > 0;
+
   const handlePlaceOrder = () => {
     if (!tokenId || !price || !size) return;
     placeOrder.mutate({
@@ -290,7 +299,14 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
   return (
     <Card className="sticky top-20">
       <CardHeader>
-        <CardTitle className="text-base">Trade</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Trade</CardTitle>
+          {isConnected && (
+            <span className="text-xs text-muted-foreground font-mono">
+              {balanceLoading ? '...' : `$${balance.toFixed(2)} USDC`}
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
@@ -372,24 +388,50 @@ function TradePanelInner({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; toke
             <span className="text-muted-foreground">Max Profit</span>
             <span className="text-positive">${orderEstimate?.potentialPnL.toFixed(2) ?? '0.00'}</span>
           </div>
+          {isConnected && insufficientBalance && (
+            <div className="flex justify-between pt-1 border-t border-border/50">
+              <span className="text-negative">Insufficient balance</span>
+              <span className="text-negative">${balance.toFixed(2)} available</span>
+            </div>
+          )}
         </div>
 
-        <Button
-          className="w-full"
-          size="lg"
-          variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-          disabled={!isConnected || !tokenId || !price || !size || placeOrder.isPending}
-          onClick={handlePlaceOrder}
-        >
-          {placeOrder.isPending
-            ? 'Placing Order...'
-            : isConnected
-              ? `${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
-              : 'Connect Wallet to Trade'}
-        </Button>
+        {needsApproval ? (
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={isApproving}
+            onClick={async () => {
+              const hash = await approve();
+              if (hash) {
+                toast({ variant: 'success', title: 'USDC approved', description: `TX: ${hash.slice(0, 10)}...` });
+              }
+            }}
+          >
+            {isApproving ? 'Approving USDC...' : 'Approve USDC'}
+          </Button>
+        ) : (
+          <Button
+            className="w-full"
+            size="lg"
+            variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
+            disabled={!isConnected || !tokenId || !price || !size || placeOrder.isPending || insufficientBalance}
+            onClick={handlePlaceOrder}
+          >
+            {placeOrder.isPending
+              ? 'Placing Order...'
+              : isConnected
+                ? `${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
+                : 'Connect Wallet to Trade'}
+          </Button>
+        )}
 
         {placeOrder.error && (
           <p className="text-xs text-negative text-center">{placeOrder.error.message}</p>
+        )}
+
+        {approvalError && (
+          <p className="text-xs text-negative text-center">{approvalError}</p>
         )}
 
         {!isConnected && (

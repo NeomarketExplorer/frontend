@@ -15,3 +15,6 @@ export * from './calculations';
 export * from './validation';
 export * from './orders';
 export * from './format';
+export * from './hmac';
+export * from './signing';
+export * from './auth';

@@ -26,6 +26,14 @@
       "types": "./src/signing.ts",
       "default": "./src/signing.ts"
     },
+    "./hmac": {
+      "types": "./src/hmac.ts",
+      "default": "./src/hmac.ts"
+    },
+    "./auth": {
+      "types": "./src/auth.ts",
+      "default": "./src/auth.ts"
+    },
     "./pnl": {
       "types": "./src/pnl.ts",
       "default": "./src/pnl.ts"

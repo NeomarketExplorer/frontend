@@ -8,3 +8,6 @@ export * from './use-positions';
 export * from './use-auth';
 export * from './use-websocket';
 export * from './use-orders';
+export * from './use-clob-auth';
+export * from './use-balance';
+export * from './use-token-approval';

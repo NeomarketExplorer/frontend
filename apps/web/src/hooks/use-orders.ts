@@ -1,25 +1,26 @@
+'use client';
+
 /**
- * Order placement hooks
+ * Order placement, cancellation, and open orders hooks
+ * Full L2 + builder HMAC authentication
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useWallets } from '@privy-io/react-auth';
 import {
   type OrderParams,
+  type SignedOrder,
   buildOrderStruct,
-  createOrderTypedData,
   validateOrderParams,
   calculateOrderEstimate,
+  signOrder,
+  buildOrderRequestBody,
+  signClobRequest,
+  ORDER_TYPES,
 } from '@app/trading';
-import { useWalletStore } from '@/stores';
+import { CTF_EXCHANGE_DOMAIN } from '@app/config';
+import { useWalletStore, useClobCredentialStore } from '@/stores';
 
-// Polygon chain ID
-const CHAIN_ID = 137;
-
-// CTF Exchange address on Polygon
-const CTF_EXCHANGE_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
-
-// CLOB API for order submission
 const CLOB_API_URL = 'https://clob.polymarket.com';
 
 interface UseOrderOptions {
@@ -28,101 +29,126 @@ interface UseOrderOptions {
 }
 
 /**
- * Hook for placing orders
+ * Hook for placing orders with full L2 + builder authentication
  */
 export function usePlaceOrder(options?: UseOrderOptions) {
-  const { authenticated, user } = usePrivy();
   const { wallets } = useWallets();
   const { address } = useWalletStore();
+  const { credentials } = useClobCredentialStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (params: OrderParams) => {
-      // Validate params
+      // 1. Validate params
       const validation = validateOrderParams(params);
       if (!validation.valid) {
         throw new Error(validation.errors.join(', '));
       }
 
-      // Check wallet connection
-      if (!authenticated || !address) {
+      // 2. Check wallet + credentials
+      if (!address) {
         throw new Error('Please connect your wallet to place orders');
       }
+      if (!credentials) {
+        throw new Error('CLOB credentials not available. Please reconnect your wallet.');
+      }
 
-      const wallet = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
+      const wallet = wallets.find(
+        (w) => w.address.toLowerCase() === address.toLowerCase()
+      );
       if (!wallet) {
         throw new Error('Wallet not found');
       }
 
-      // Get nonce from CLOB API
-      const nonceRes = await fetch(`${CLOB_API_URL}/auth/nonce`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!nonceRes.ok) {
-        throw new Error('Failed to get nonce');
-      }
-      const { nonce } = await nonceRes.json();
+      // 3. Build order struct (nonce = "0" for EOA)
+      const orderStruct = buildOrderStruct(params, address, '0');
 
-      // Build order struct
-      const orderStruct = buildOrderStruct(params, address, nonce);
-
-      // Create typed data for signing
-      const typedData = createOrderTypedData(orderStruct, CHAIN_ID, CTF_EXCHANGE_ADDRESS);
-
-      // Get provider and sign
+      // 4. Sign Order EIP-712 via wallet provider
       const provider = await wallet.getEthereumProvider();
 
-      const signature = await provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [
-          address,
-          JSON.stringify({
-            types: {
-              EIP712Domain: [
-                { name: 'name', type: 'string' },
-                { name: 'version', type: 'string' },
-                { name: 'chainId', type: 'uint256' },
-                { name: 'verifyingContract', type: 'address' },
-              ],
-              ...typedData.types,
-            },
-            primaryType: 'Order',
-            domain: typedData.domain,
-            message: Object.fromEntries(
-              Object.entries(typedData.message).map(([k, v]) => [
-                k,
-                typeof v === 'bigint' ? v.toString() : v,
-              ])
-            ),
-          }),
-        ],
-      }) as string;
-
-      // Submit order to CLOB
-      const signedOrder = {
-        ...orderStruct,
-        signature,
+      const signTypedDataFn = async (p: {
+        account: string;
+        domain: typeof CTF_EXCHANGE_DOMAIN;
+        types: typeof ORDER_TYPES;
+        primaryType: 'Order';
+        message: Record<string, unknown>;
+      }) => {
+        const sig = await provider.request({
+          method: 'eth_signTypedData_v4',
+          params: [
+            p.account,
+            JSON.stringify({
+              types: {
+                EIP712Domain: [
+                  { name: 'name', type: 'string' },
+                  { name: 'version', type: 'string' },
+                  { name: 'chainId', type: 'uint256' },
+                  { name: 'verifyingContract', type: 'address' },
+                ],
+                ...p.types,
+              },
+              primaryType: p.primaryType,
+              domain: p.domain,
+              message: p.message,
+            }),
+          ],
+        });
+        return sig as string;
       };
 
-      const submitRes = await fetch(`${CLOB_API_URL}/order`, {
+      const signedOrder = await signOrder(orderStruct, address, signTypedDataFn);
+
+      // 5. Build POST body
+      const body = buildOrderRequestBody(signedOrder, credentials.apiKey, params.orderType ?? 'GTC');
+      const bodyStr = JSON.stringify(body);
+
+      // 6. Generate L2 HMAC headers
+      const l2Headers = await signClobRequest(
+        credentials,
+        address,
+        'POST',
+        '/order',
+        bodyStr
+      );
+
+      // 7. Fetch builder headers from /api/polymarket/sign
+      const builderRes = await fetch('/api/polymarket/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signedOrder),
+        body: JSON.stringify({ method: 'POST', path: '/order', body }),
+      });
+      if (!builderRes.ok) {
+        throw new Error('Failed to get builder signature');
+      }
+      const builderHeaders = await builderRes.json();
+
+      // 8. Merge L2 + builder headers and POST to CLOB
+      const res = await fetch(`${CLOB_API_URL}/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...l2Headers,
+          ...builderHeaders,
+        },
+        body: bodyStr,
       });
 
-      if (!submitRes.ok) {
-        const error = await submitRes.json();
-        throw new Error(error.message || 'Failed to submit order');
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ errorMsg: 'Order submission failed' }));
+        throw new Error(error.errorMsg || error.message || 'Failed to submit order');
       }
 
-      const result = await submitRes.json();
+      const result = await res.json();
+      if (!result.success) {
+        throw new Error(result.errorMsg || 'Order was not accepted');
+      }
+
       return result.orderID || result.orderId;
     },
     onSuccess: (orderId) => {
-      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['positions'] });
+      queryClient.invalidateQueries({ queryKey: ['balance'] });
       options?.onSuccess?.(orderId);
     },
     onError: (error: Error) => {
@@ -149,36 +175,40 @@ export function useOrderEstimate(params: Partial<OrderParams>) {
 }
 
 /**
- * Hook for cancelling orders
+ * Hook for cancelling orders with L2 authentication
  */
 export function useCancelOrder(options?: UseOrderOptions) {
-  const { authenticated } = usePrivy();
-  const { wallets } = useWallets();
   const { address } = useWalletStore();
+  const { credentials } = useClobCredentialStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (orderId: string) => {
-      if (!authenticated || !address) {
+      if (!address) {
         throw new Error('Please connect your wallet');
       }
-
-      const wallet = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
-      if (!wallet) {
-        throw new Error('Wallet not found');
+      if (!credentials) {
+        throw new Error('CLOB credentials not available');
       }
 
-      // Cancel order via CLOB API
+      // L2 headers for DELETE /order/{id}
+      const l2Headers = await signClobRequest(
+        credentials,
+        address,
+        'DELETE',
+        `/order/${orderId}`
+      );
+
       const res = await fetch(`${CLOB_API_URL}/order/${orderId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          // Add auth headers as needed
+          ...l2Headers,
         },
       });
 
       if (!res.ok) {
-        const error = await res.json();
+        const error = await res.json().catch(() => ({ message: 'Failed to cancel order' }));
         throw new Error(error.message || 'Failed to cancel order');
       }
 
@@ -195,24 +225,43 @@ export function useCancelOrder(options?: UseOrderOptions) {
 }
 
 /**
- * Hook for getting user's open orders
+ * Hook for getting user's open orders with L2 authentication
  */
-export function useOpenOrders() {
+export function useOpenOrders(params?: { market?: string; assetId?: string }) {
   const { address } = useWalletStore();
+  const { credentials } = useClobCredentialStore();
 
-  // This would need to be implemented with the CLOB API
-  // For now, return empty array
-  return {
-    data: [] as Array<{
-      id: string;
-      tokenId: string;
-      side: 'BUY' | 'SELL';
-      price: number;
-      size: number;
-      filledSize: number;
-      status: 'open' | 'partial' | 'filled' | 'cancelled';
-      createdAt: string;
-    }>,
-    isLoading: false,
-  };
+  return useQuery({
+    queryKey: ['orders', address, params?.market, params?.assetId],
+    queryFn: async () => {
+      if (!address || !credentials) return [];
+
+      const searchParams = new URLSearchParams();
+      if (params?.market) searchParams.set('market', params.market);
+      if (params?.assetId) searchParams.set('asset_id', params.assetId);
+      const qs = searchParams.toString();
+      const path = `/data/orders${qs ? `?${qs}` : ''}`;
+
+      const l2Headers = await signClobRequest(
+        credentials,
+        address,
+        'GET',
+        path
+      );
+
+      const res = await fetch(`${CLOB_API_URL}${path}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...l2Headers,
+        },
+      });
+
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!address && !!credentials,
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
 }
