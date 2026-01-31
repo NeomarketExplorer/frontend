@@ -84,11 +84,14 @@ export function buildOrderRequestBody(
   ownerApiKey: string,
   orderType: string = 'GTC'
 ) {
-  const salt =
+  const saltString =
     typeof signedOrder.salt === 'string' && signedOrder.salt.startsWith('0x')
       ? BigInt(signedOrder.salt).toString(10)
       : signedOrder.salt;
+  const salt = Number.parseInt(saltString, 10);
+
   return {
+    deferExec: false,
     order: {
       ...signedOrder,
       salt,
