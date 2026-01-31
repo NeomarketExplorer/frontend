@@ -88,13 +88,10 @@ export function buildOrderRequestBody(
     typeof signedOrder.salt === 'string' && signedOrder.salt.startsWith('0x')
       ? BigInt(signedOrder.salt).toString(10)
       : signedOrder.salt;
-  const side = signedOrder.side === 0 ? 'BUY' : 'SELL';
-
   return {
     order: {
       ...signedOrder,
       salt,
-      side,
     },
     owner: ownerApiKey,
     orderType,
