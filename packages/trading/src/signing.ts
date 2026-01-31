@@ -77,18 +77,26 @@ export async function signOrder(
 }
 
 /**
- * Build the POST /order request body from a signed order
+ * Build the POST /order request body from a signed order.
+ *
+ * The CLOB API expects `salt` as a JSON integer (no scientific notation).
+ * We validate it's within Number.MAX_SAFE_INTEGER to guarantee correct serialization.
  */
 export function buildOrderRequestBody(
   signedOrder: SignedOrder,
   ownerApiKey: string,
   orderType: string = 'GTC'
 ) {
-  const saltString =
-    typeof signedOrder.salt === 'string' && signedOrder.salt.startsWith('0x')
-      ? BigInt(signedOrder.salt).toString(10)
-      : signedOrder.salt;
-  const salt = Number.parseInt(saltString, 10);
+  // Normalize salt: accept hex or decimal strings, convert via BigInt for safety
+  const saltBig = BigInt(
+    signedOrder.salt.startsWith('0x') ? signedOrder.salt : signedOrder.salt
+  );
+  const salt = Number(saltBig);
+  if (!Number.isSafeInteger(salt)) {
+    throw new Error(
+      `Salt ${signedOrder.salt} exceeds safe integer range. Order cannot be serialized correctly.`
+    );
+  }
 
   return {
     deferExec: false,

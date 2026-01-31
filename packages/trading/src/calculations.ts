@@ -57,3 +57,45 @@ export function formatUSD(amount: number): string {
     maximumFractionDigits: 2,
   }).format(amount);
 }
+
+interface OrderbookLevel {
+  price: number;
+  size: number;
+}
+
+/**
+ * Walk orderbook depth to compute the average fill price for a market order.
+ *
+ * For BUY: walks asks (ascending price). For SELL: walks bids (descending price).
+ * Returns the average fill price in decimal (0-1) and total cost in USDC,
+ * or null if the book lacks sufficient liquidity.
+ *
+ * @param levels - Orderbook levels (asks for BUY, bids for SELL), sorted best-first
+ * @param size - Number of shares to fill
+ */
+export function walkOrderbookDepth(
+  levels: OrderbookLevel[],
+  size: number
+): { avgPrice: number; totalCost: number; filledSize: number } | null {
+  if (levels.length === 0 || size <= 0) return null;
+
+  let remaining = size;
+  let totalCost = 0;
+  let filledSize = 0;
+
+  for (const level of levels) {
+    if (remaining <= 0) break;
+    const fillAtLevel = Math.min(remaining, level.size);
+    totalCost += fillAtLevel * level.price;
+    filledSize += fillAtLevel;
+    remaining -= fillAtLevel;
+  }
+
+  if (filledSize === 0) return null;
+
+  return {
+    avgPrice: totalCost / filledSize,
+    totalCost,
+    filledSize,
+  };
+}

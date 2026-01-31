@@ -43,29 +43,33 @@ export interface OrderResult {
 }
 
 /**
- * Calculate order amounts based on price and size
+ * Calculate order amounts based on price and size.
+ *
+ * Uses integer arithmetic to avoid floating-point precision errors.
+ * Price is in cents (1-99), USDC has 6 decimals.
+ * 1 cent = 0.01 USDC = 10_000 base units (0.01 * 1e6).
+ *
+ * For BUY: pay (price * size * 10000) USDC base units, receive (size * 1e6) shares
+ * For SELL: pay (size * 1e6) shares, receive (price * size * 10000) USDC base units
  */
 export function calculateOrderAmounts(
   price: number,
   size: number,
   side: OrderSide
 ): { makerAmount: number; takerAmount: number } {
-  // Price is in cents (0.01 - 0.99)
-  // For BUY: pay (price * size) USDC, receive (size) shares
-  // For SELL: pay (size) shares, receive (price * size) USDC
-
-  const priceDecimal = price / 100; // Convert cents to decimal
-  const cost = priceDecimal * size;
+  // Round to avoid any residual floating-point error from fractional sizes
+  const costBaseUnits = Math.round(price * size * 10_000);
+  const sizeBaseUnits = Math.round(size * 1_000_000);
 
   if (side === 'BUY') {
     return {
-      makerAmount: Math.floor(cost * 1e6), // USDC has 6 decimals
-      takerAmount: Math.floor(size * 1e6), // Shares have 6 decimals
+      makerAmount: costBaseUnits,
+      takerAmount: sizeBaseUnits,
     };
   } else {
     return {
-      makerAmount: Math.floor(size * 1e6),
-      takerAmount: Math.floor(cost * 1e6),
+      makerAmount: sizeBaseUnits,
+      takerAmount: costBaseUnits,
     };
   }
 }

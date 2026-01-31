@@ -36,12 +36,14 @@ export function useClobAuth() {
   const { address, isConnected } = useWalletStore();
   const {
     credentials,
+    credentialAddress,
     isDerivingCredentials,
     derivationError,
     setCredentials,
     setDeriving,
     setDerivationError,
     clearCredentials,
+    loadForAddress,
   } = useClobCredentialStore();
 
   // Guard against double-derivation
@@ -99,7 +101,7 @@ export function useClobAuth() {
       }
 
       lastAddressRef.current = address;
-      setCredentials(creds);
+      setCredentials(creds, address);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to derive credentials';
       setDerivationError(msg);
@@ -118,16 +120,21 @@ export function useClobAuth() {
       return;
     }
 
-    // Address changed — clear old credentials and re-derive
-    if (lastAddressRef.current && lastAddressRef.current !== address) {
-      clearCredentials();
+    // Address changed — load credentials for new address from session
+    if (lastAddressRef.current !== address) {
+      if (lastAddressRef.current) {
+        clearCredentials();
+      }
+      loadForAddress(address);
+      lastAddressRef.current = address;
     }
 
-    // Only derive if we don't have credentials for this address
-    if (!credentials && !derivingRef.current) {
+    // Derive if no credentials loaded for this address
+    const currentCreds = useClobCredentialStore.getState().credentials;
+    if (!currentCreds && !derivingRef.current) {
       deriveCredentials();
     }
-  }, [isConnected, address, credentials, deriveCredentials, clearCredentials]);
+  }, [isConnected, address, credentials, credentialAddress, deriveCredentials, clearCredentials, loadForAddress]);
 
   return {
     credentials,

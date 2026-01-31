@@ -29,7 +29,7 @@ import {
   useClobMarket,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
-import { calculateOrderEstimate } from '@app/trading';
+import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
 import { buildOutcomeEntries, isYesOutcome, isNoOutcome, type OutcomeEntry } from '@/lib/outcomes';
 import { formatVolume } from '@/lib/indexer';
 import { usePrivyAvailable } from '@/providers/privy-provider';
@@ -231,25 +231,54 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         <div>
-          <TradePanel outcomes={outcomes} tokenId={tokenId} />
+          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} />
         </div>
       </div>
     </div>
   );
 }
 
-function TradePanel({ outcomes, tokenId }: { outcomes: OutcomeEntry[]; tokenId: string | null }) {
+function TradePanel({
+  outcomes,
+  tokenId,
+  mappedTokenIds,
+}: {
+  outcomes: OutcomeEntry[];
+  tokenId: string | null;
+  mappedTokenIds: string[];
+}) {
   const privyAvailable = usePrivyAvailable();
   const { data: orderbook } = useOrderbook(tokenId);
 
+  // Fetch midpoints for all outcomes to show live CLOB prices on buttons
+  const { data: midpoint0 } = useMidpoint(mappedTokenIds[0] ?? null);
+  const { data: midpoint1 } = useMidpoint(mappedTokenIds[1] ?? null);
+  const liveMidpoints = useMemo(
+    () => [midpoint0 ?? null, midpoint1 ?? null],
+    [midpoint0, midpoint1]
+  );
+
   if (!privyAvailable) {
-    return <TradePanelDisabled outcomes={outcomes} />;
+    return <TradePanelDisabled outcomes={outcomes} liveMidpoints={liveMidpoints} />;
   }
 
-  return <TradePanelInner outcomes={outcomes} tokenId={tokenId} orderbook={orderbook ?? null} />;
+  return (
+    <TradePanelInner
+      outcomes={outcomes}
+      tokenId={tokenId}
+      orderbook={orderbook ?? null}
+      liveMidpoints={liveMidpoints}
+    />
+  );
 }
 
-function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
+function TradePanelDisabled({
+  outcomes,
+  liveMidpoints,
+}: {
+  outcomes: OutcomeEntry[];
+  liveMidpoints: (number | null)[];
+}) {
   const { orderForm } = useTradingStore();
 
   return (
@@ -270,6 +299,8 @@ function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
                   ? 'positive'
                   : 'secondary'
               : 'outline';
+            // Prefer live CLOB midpoint, fall back to indexer snapshot
+            const displayPrice = liveMidpoints[i] ?? outcome.price;
             return (
               <Button
                 key={outcome.key}
@@ -279,7 +310,7 @@ function TradePanelDisabled({ outcomes }: { outcomes: OutcomeEntry[] }) {
               >
                 {outcome.label}
                 <span className="ml-1 opacity-70">
-                  {outcome.price != null ? `${(outcome.price * 100).toFixed(0)}c` : '--'}
+                  {displayPrice != null ? `${(displayPrice * 100).toFixed(0)}c` : '--'}
                 </span>
               </Button>
             );
@@ -310,10 +341,12 @@ function TradePanelInner({
   outcomes,
   tokenId,
   orderbook,
+  liveMidpoints,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   orderbook: ParsedOrderbook | null;
+  liveMidpoints: (number | null)[];
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
@@ -328,13 +361,29 @@ function TradePanelInner({
   const { approve, isApproving, error: approvalError } = useTokenApproval();
 
   const isMarket = orderForm.mode === 'market';
+  const size = parseFloat(orderForm.size) || 0;
 
-  // For market orders, compute price from orderbook
+  // For market orders, walk orderbook depth instead of just using best level
   const bestAsk = orderbook?.asks[0]?.price ?? 0;
   const bestBid = orderbook?.bids[0]?.price ?? 0;
-  const marketPrice = orderForm.side === 'BUY'
-    ? Math.min(bestAsk * 100 + MARKET_ORDER_SLIPPAGE, 99)
-    : Math.max(bestBid * 100 - MARKET_ORDER_SLIPPAGE, 1);
+
+  const depthResult = useMemo(() => {
+    if (!isMarket || size <= 0 || !orderbook) return null;
+    const levels = orderForm.side === 'BUY' ? orderbook.asks : orderbook.bids;
+    return walkOrderbookDepth(levels, size);
+  }, [isMarket, size, orderbook, orderForm.side]);
+
+  // Market price: use average fill price from depth walk, or best level + slippage
+  const marketPrice = useMemo(() => {
+    if (depthResult && depthResult.filledSize >= size) {
+      // Convert avg decimal price to cents, add small slippage buffer
+      return Math.min(Math.round(depthResult.avgPrice * 100) + MARKET_ORDER_SLIPPAGE, 99);
+    }
+    // Fallback to best level + slippage
+    return orderForm.side === 'BUY'
+      ? Math.min(Math.round(bestAsk * 100) + MARKET_ORDER_SLIPPAGE, 99)
+      : Math.max(Math.round(bestBid * 100) - MARKET_ORDER_SLIPPAGE, 1);
+  }, [depthResult, size, bestAsk, bestBid, orderForm.side]);
 
   const placeOrder = usePlaceOrder({
     onSuccess: (orderId) => {
@@ -346,7 +395,6 @@ function TradePanelInner({
   });
 
   const price = isMarket ? marketPrice : (parseFloat(orderForm.price) || 0);
-  const size = parseFloat(orderForm.size) || 0;
   const orderEstimate = price > 0 && size > 0 && tokenId
     ? calculateOrderEstimate({
         tokenId,
@@ -430,6 +478,8 @@ function TradePanelInner({
                   ? 'positive'
                   : 'secondary'
               : 'outline';
+            // Prefer live CLOB midpoint, fall back to indexer snapshot
+            const displayPrice = liveMidpoints[i] ?? outcome.price;
             return (
               <Button
                 key={outcome.key}
@@ -439,7 +489,7 @@ function TradePanelInner({
               >
                 {outcome.label}
                 <span className="ml-1 opacity-70">
-                  {outcome.price != null ? `${(outcome.price * 100).toFixed(0)}c` : '--'}
+                  {displayPrice != null ? `${(displayPrice * 100).toFixed(0)}c` : '--'}
                 </span>
               </Button>
             );
@@ -462,7 +512,7 @@ function TradePanelInner({
         </div>
 
         {isMarket ? (
-          <div className="bg-muted/50 rounded-lg p-3">
+          <div className="bg-muted/50 rounded-lg p-3 space-y-1">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
                 {orderForm.side === 'BUY' ? 'Best Ask' : 'Best Bid'}
@@ -473,6 +523,19 @@ function TradePanelInner({
                   : `${(orderForm.side === 'BUY' ? bestAsk * 100 : bestBid * 100).toFixed(1)}c`}
               </span>
             </div>
+            {depthResult && size > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Avg Fill</span>
+                <span className="font-mono">
+                  {`${(depthResult.avgPrice * 100).toFixed(1)}c`}
+                  {depthResult.filledSize < size && (
+                    <span className="text-negative ml-1 text-xs">
+                      (partial: {depthResult.filledSize.toFixed(0)}/{size.toFixed(0)})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <div>

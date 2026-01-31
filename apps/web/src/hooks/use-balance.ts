@@ -83,16 +83,15 @@ async function fetchBalanceAllowance(
       balanceSource: 'onchain',
     };
   }
-  const path = '/balance-allowance';
-  const params = '?signature_type=0';
-  const fullPath = `${path}${params}`;
+  const requestPath = '/balance-allowance?signature_type=0';
 
-  const headers = await signClobRequest(credentials, address, 'GET', path);
+  // L2 HMAC must sign the full request path including query params
+  const headers = await signClobRequest(credentials, address, 'GET', requestPath);
 
   try {
     let res: Response;
     try {
-      res = await fetch(`${DIRECT_CLOB_API_URL}${fullPath}`, {
+      res = await fetch(`${DIRECT_CLOB_API_URL}${requestPath}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -100,7 +99,7 @@ async function fetchBalanceAllowance(
         },
       });
     } catch {
-      res = await fetch(`${PROXY_CLOB_API_URL}${fullPath}`, {
+      res = await fetch(`${PROXY_CLOB_API_URL}${requestPath}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

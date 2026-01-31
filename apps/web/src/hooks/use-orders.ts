@@ -265,17 +265,18 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
       if (params?.market) searchParams.set('market', params.market);
       if (params?.assetId) searchParams.set('asset_id', params.assetId);
       const qs = searchParams.toString();
-      const path = '/data/orders';
-      const fullPath = `${path}${qs ? `?${qs}` : ''}`;
+      const basePath = '/data/orders';
+      const requestPath = `${basePath}${qs ? `?${qs}` : ''}`;
 
+      // L2 HMAC must sign the full request path including query params
       const l2Headers = await signClobRequest(
         credentials,
         address,
         'GET',
-        path
+        requestPath
       );
 
-      const res = await fetchClob(fullPath, {
+      const res = await fetchClob(requestPath, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
