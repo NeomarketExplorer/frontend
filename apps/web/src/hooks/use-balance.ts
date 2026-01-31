@@ -4,54 +4,118 @@
  * Hook for fetching USDC balance and allowance from CLOB API.
  * Uses GET /balance-allowance?signature_type=0 with L2 auth headers.
  * Updates wallet-store.usdcBalance and provides allowance info.
+ * Falls back to on-chain balance when CLOB auth is unavailable or fails.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { signClobRequest } from '@app/trading';
+import { CHAIN_CONFIG } from '@app/config';
+import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 import { useEffect } from 'react';
 
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
 const CLOB_API_URL = '/api/clob';
+const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
+const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
+
+let publicClient: ReturnType<typeof createPublicClient> | null = null;
+
+function getPublicClient() {
+  if (!publicClient) {
+    publicClient = createPublicClient({
+      transport: http(POLYGON_RPC_URL),
+    });
+  }
+  return publicClient;
+}
 
 interface BalanceAllowance {
   balance: number;       // USDC balance (human-readable, 6 decimals converted)
   allowance: number;     // Token allowance for CTF Exchange
   rawBalance: string;    // Raw balance string from API
   rawAllowance: string;  // Raw allowance string from API
+  walletBalance?: number; // On-chain USDC balance (fallback/display)
+  balanceSource: 'clob' | 'onchain';
+}
+
+async function fetchOnChainBalance(address: string): Promise<number> {
+  const client = getPublicClient();
+  const balance = await client.readContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  });
+  return Number(formatUnits(balance, 6));
 }
 
 async function fetchBalanceAllowance(
   address: string,
-  credentials: { apiKey: string; secret: string; passphrase: string }
+  credentials: { apiKey: string; secret: string; passphrase: string } | null
 ): Promise<BalanceAllowance> {
+  if (!credentials) {
+    const walletBalance = await fetchOnChainBalance(address);
+    return {
+      balance: walletBalance,
+      allowance: 0,
+      rawBalance: '0',
+      rawAllowance: '0',
+      walletBalance,
+      balanceSource: 'onchain',
+    };
+  }
   const path = '/balance-allowance';
   const params = '?signature_type=0';
   const fullPath = `${path}${params}`;
 
   const headers = await signClobRequest(credentials, address, 'GET', fullPath);
 
-  const res = await fetch(`${CLOB_API_URL}${fullPath}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
+  try {
+    const res = await fetch(`${CLOB_API_URL}${fullPath}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Balance fetch failed (${res.status}): ${text}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Balance fetch failed (${res.status}): ${text}`);
+    }
+
+    const data = await res.json();
+    const balance = parseFloat(data.balance ?? '0') / 1e6;
+
+    let walletBalance: number | undefined;
+    if (balance === 0) {
+      try {
+        walletBalance = await fetchOnChainBalance(address);
+      } catch {
+        walletBalance = undefined;
+      }
+    }
+
+    return {
+      balance,
+      allowance: parseFloat(data.allowance ?? '0') / 1e6,
+      rawBalance: data.balance ?? '0',
+      rawAllowance: data.allowance ?? '0',
+      walletBalance,
+      balanceSource: 'clob',
+    };
+  } catch (err) {
+    const walletBalance = await fetchOnChainBalance(address);
+    return {
+      balance: walletBalance,
+      allowance: 0,
+      rawBalance: '0',
+      rawAllowance: '0',
+      walletBalance,
+      balanceSource: 'onchain',
+    };
   }
-
-  const data = await res.json();
-
-  return {
-    balance: parseFloat(data.balance ?? '0') / 1e6,
-    allowance: parseFloat(data.allowance ?? '0') / 1e6,
-    rawBalance: data.balance ?? '0',
-    rawAllowance: data.allowance ?? '0',
-  };
 }
 
 /**
@@ -66,8 +130,8 @@ export function useUsdcBalance() {
 
   const query = useQuery({
     queryKey: ['usdc-balance', address],
-    queryFn: () => fetchBalanceAllowance(address!, credentials!),
-    enabled: !!address && !!credentials && isConnected,
+    queryFn: () => fetchBalanceAllowance(address!, credentials),
+    enabled: !!address && isConnected,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
@@ -84,6 +148,8 @@ export function useUsdcBalance() {
     allowance: query.data?.allowance ?? 0,
     rawBalance: query.data?.rawBalance ?? '0',
     rawAllowance: query.data?.rawAllowance ?? '0',
+    walletBalance: query.data?.walletBalance,
+    balanceSource: query.data?.balanceSource ?? 'clob',
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

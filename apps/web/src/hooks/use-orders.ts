@@ -149,7 +149,9 @@ export function usePlaceOrder(options?: UseOrderOptions) {
     onSuccess: (orderId) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['positions'] });
-      queryClient.invalidateQueries({ queryKey: ['balance'] });
+      if (address) {
+        queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+      }
       options?.onSuccess?.(orderId);
     },
     onError: (error: Error) => {

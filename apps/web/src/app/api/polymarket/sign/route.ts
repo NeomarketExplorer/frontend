@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Build HMAC message: timestamp + method + path + body
+  // Polymarket builder attribution uses unix seconds (per builder-signing-sdk)
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const bodyStr = body ? JSON.stringify(body) : '';
   const message = timestamp + method + path + bodyStr;
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
     const pad = normalizedSecret.length % 4;
     if (pad === 2) normalizedSecret += '==';
     else if (pad === 3) normalizedSecret += '=';
-    const secretBytes = Uint8Array.from(atob(normalizedSecret), c => c.charCodeAt(0));
+    const secretBytes = new Uint8Array(Buffer.from(normalizedSecret, 'base64'));
 
     // Import key for HMAC-SHA256
     const key = await crypto.subtle.importKey(
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
 
     // URL-safe base64 (keep '=' padding per Polymarket spec)
-    const base64Sig = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    const base64Sig = Buffer.from(new Uint8Array(sig)).toString('base64');
     const urlSafeSig = base64Sig.replace(/\+/g, '-').replace(/\//g, '_');
 
     return NextResponse.json({

@@ -275,7 +275,7 @@ function TradePanelInner({
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
-  const { balance, allowance, isLoading: balanceLoading } = useUsdcBalance();
+  const { balance, allowance, walletBalance, balanceSource, isLoading: balanceLoading } = useUsdcBalance();
   const { approve, isApproving, error: approvalError } = useTokenApproval();
 
   const isMarket = orderForm.mode === 'market';
@@ -329,8 +329,14 @@ function TradePanelInner({
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Trade</CardTitle>
           {isConnected && (
-            <span className="text-xs text-muted-foreground font-mono">
+            <span className="text-xs text-muted-foreground font-mono text-right">
               {balanceLoading ? '...' : `$${balance.toFixed(2)} USDC`}
+              {walletBalance !== undefined && walletBalance !== balance && (
+                <span className="block text-[0.65rem] text-muted-foreground">
+                  Wallet: ${walletBalance.toFixed(2)}
+                  {balanceSource === 'onchain' ? ' (on-chain)' : ''}
+                </span>
+              )}
             </span>
           )}
         </div>
