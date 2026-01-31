@@ -14,8 +14,9 @@ import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 import { useEffect } from 'react';
 
-// Route through our proxy to avoid CORS issues with custom POLY_* headers
-const CLOB_API_URL = '/api/clob';
+// Prefer direct CLOB to avoid Cloudflare blocks on server IPs; fallback to proxy on CORS/network errors.
+const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_API_URL = '/api/clob';
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_EXCHANGE = CHAIN_CONFIG.polygon.ctfExchange;
 const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
@@ -89,13 +90,24 @@ async function fetchBalanceAllowance(
   const headers = await signClobRequest(credentials, address, 'GET', fullPath);
 
   try {
-    const res = await fetch(`${CLOB_API_URL}${fullPath}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${DIRECT_CLOB_API_URL}${fullPath}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+      });
+    } catch {
+      res = await fetch(`${PROXY_CLOB_API_URL}${fullPath}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+      });
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');

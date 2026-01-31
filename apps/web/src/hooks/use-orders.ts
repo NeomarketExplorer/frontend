@@ -22,7 +22,17 @@ import { CTF_EXCHANGE_DOMAIN } from '@app/config';
 import { useWalletStore, useClobCredentialStore } from '@/stores';
 
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
-const CLOB_API_URL = '/api/clob';
+const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_API_URL = '/api/clob';
+
+async function fetchClob(path: string, init: RequestInit) {
+  // Prefer direct CLOB (avoids Cloudflare blocks on server IP). Fallback to proxy on CORS/network errors.
+  try {
+    return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
+  } catch {
+    return await fetch(`${PROXY_CLOB_API_URL}${path}`, init);
+  }
+}
 
 interface UseOrderOptions {
   onSuccess?: (orderId: string) => void;
@@ -124,7 +134,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       const builderHeaders = await builderRes.json();
 
       // 8. Merge L2 + builder headers and POST to CLOB
-      const res = await fetch(`${CLOB_API_URL}/order`, {
+      const res = await fetchClob('/order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +221,7 @@ export function useCancelOrder(options?: UseOrderOptions) {
         `/order/${orderId}`
       );
 
-      const res = await fetch(`${CLOB_API_URL}/order/${orderId}`, {
+      const res = await fetchClob(`/order/${orderId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -261,7 +271,7 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
         path
       );
 
-      const res = await fetch(`${CLOB_API_URL}${path}`, {
+      const res = await fetchClob(path, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

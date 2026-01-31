@@ -16,7 +16,16 @@ import {
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
-const CLOB_API_URL = '/api/clob';
+const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_API_URL = '/api/clob';
+
+async function fetchClob(path: string, init: RequestInit) {
+  try {
+    return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
+  } catch {
+    return await fetch(`${PROXY_CLOB_API_URL}${path}`, init);
+  }
+}
 
 /**
  * Derives or creates CLOB L2 credentials on wallet connect.
@@ -133,7 +142,7 @@ async function fetchCredentials(
   path: string,
   headers: Record<string, string>
 ): Promise<L2Credentials> {
-  const res = await fetch(`${CLOB_API_URL}${path}`, {
+  const res = await fetchClob(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
