@@ -30,6 +30,18 @@ export {
   TooltipProvider,
 } from './components/tooltip';
 export { Skeleton } from './components/skeleton';
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from './components/dialog';
 export { Badge, badgeVariants, type BadgeProps } from './components/badge';
 
 // Market components
