@@ -1,5 +1,7 @@
 /**
- * TanStack Query hooks for positions and portfolio data
+ * TanStack Query hooks for positions and portfolio data.
+ * Fetches from Polymarket Data API via /api/data proxy,
+ * then enriches positions with market names from Gamma API.
  */
 
 import { useMemo } from 'react';
@@ -7,7 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
 
-const dataClient = createDataClient();
+// Route through proxy to avoid CORS
+const dataClient = createDataClient({ baseUrl: '/api/data' });
 
 // Query keys
 export const positionKeys = {
@@ -17,15 +20,79 @@ export const positionKeys = {
   portfolio: (address: string) => [...positionKeys.all, 'portfolio', address] as const,
 };
 
+export interface EnrichedPosition extends Position {
+  marketQuestion: string | null;
+  marketId: string | null;
+  marketSlug: string | null;
+  outcomeName: string;
+}
+
 /**
- * Fetch user positions
+ * Resolve market names for a set of positions by querying Gamma API.
+ * Groups by condition_id, batch-fetches, returns lookup map.
+ */
+async function enrichPositionsWithMarketData(
+  positions: Position[]
+): Promise<EnrichedPosition[]> {
+  if (positions.length === 0) return [];
+
+  const conditionIds = [...new Set(positions.map((p) => p.condition_id))];
+
+  // Gamma API supports condition_ids param for batch lookup
+  // Fetch through our proxy to avoid CORS
+  const marketMap: Record<string, { question: string; id: string; slug: string; outcomes: string[] }> = {};
+  try {
+    const res = await fetch(
+      `/api/gamma/markets?condition_ids=${conditionIds.join(',')}&limit=100`
+    );
+    if (res.ok) {
+      const markets = await res.json();
+      const list = Array.isArray(markets) ? markets : [];
+      for (const m of list) {
+        if (m.condition_id) {
+          marketMap[m.condition_id] = {
+            question: m.question ?? m.title ?? '',
+            id: String(m.id ?? ''),
+            slug: m.slug ?? '',
+            outcomes: Array.isArray(m.outcomes)
+              ? m.outcomes
+              : typeof m.outcomes === 'string'
+                ? JSON.parse(m.outcomes)
+                : ['Yes', 'No'],
+          };
+        }
+      }
+    }
+  } catch {
+    // Enrichment is best-effort — positions still show without names
+  }
+
+  return positions.map((p) => {
+    const market = marketMap[p.condition_id];
+    const outcomes = market?.outcomes ?? ['Yes', 'No'];
+    return {
+      ...p,
+      marketQuestion: market?.question ?? null,
+      marketId: market?.id ?? null,
+      marketSlug: market?.slug ?? null,
+      outcomeName: outcomes[p.outcome_index] ?? (p.outcome_index === 0 ? 'Yes' : 'No'),
+    };
+  });
+}
+
+/**
+ * Fetch user positions, enriched with market names from Gamma API
  */
 export function usePositions() {
   const address = useWalletStore((state) => state.address);
 
   return useQuery({
     queryKey: positionKeys.user(address ?? ''),
-    queryFn: () => (address ? dataClient.getOpenPositions(address) : []),
+    queryFn: async () => {
+      if (!address) return [];
+      const positions = await dataClient.getOpenPositions(address);
+      return enrichPositionsWithMarketData(positions);
+    },
     enabled: !!address,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
@@ -47,14 +114,19 @@ export function useActivity(limit = 50) {
 }
 
 /**
- * Fetch portfolio summary
+ * Fetch portfolio summary (enriched with market names)
  */
 export function usePortfolio() {
   const address = useWalletStore((state) => state.address);
 
   return useQuery({
     queryKey: positionKeys.portfolio(address ?? ''),
-    queryFn: () => (address ? dataClient.getPortfolioValue(address) : null),
+    queryFn: async () => {
+      if (!address) return null;
+      const raw = await dataClient.getPortfolioValue(address);
+      const positions = await enrichPositionsWithMarketData(raw.positions);
+      return { ...raw, positions };
+    },
     enabled: !!address,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
@@ -76,7 +148,7 @@ export function usePositionsByMarket() {
       acc[marketId].push(position);
       return acc;
     },
-    {} as Record<string, Position[]>
+    {} as Record<string, EnrichedPosition[]>
   );
 
   return {

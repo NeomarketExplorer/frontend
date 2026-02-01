@@ -499,10 +499,6 @@ function TradePanelInner({
     onSuccess: (orderId) => {
       setOrderStatus(null);
       toast({ variant: 'success', title: 'Order placed', description: `Order ID: ${orderId}` });
-      // Delayed position refresh — CLOB needs time to settle
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['positions'] });
-      }, 3000);
     },
     onError: (error) => {
       setOrderStatus(null);
