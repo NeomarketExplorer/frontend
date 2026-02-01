@@ -416,8 +416,10 @@ function TradePanelInner({
     : null;
 
   const estimatedCost = orderEstimate?.cost ?? 0;
-  const allowance = negRisk ? negRiskAllowance : ctfAllowance;
-  const effectiveAllowance = Math.max(allowance, onChainAllowance ?? 0);
+  // onChainAllowance only checks the regular CTF Exchange, so only use it as fallback for non-neg-risk
+  const effectiveAllowance = negRisk
+    ? negRiskAllowance
+    : Math.max(ctfAllowance, onChainAllowance ?? 0);
   const effectiveBalance = balance > 0 ? balance : (walletBalance ?? balance);
   const needsApproval = isConnected && effectiveAllowance < estimatedCost && estimatedCost > 0;
   const insufficientBalance = isConnected && effectiveBalance < estimatedCost && estimatedCost > 0;
