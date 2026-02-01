@@ -30,6 +30,7 @@ import {
   useClobMarket,
   useMarketPositions,
   useConditionalTokenApproval,
+  useConditionalTokenBalance,
   useOpenOrders,
   useCancelOrder,
 } from '@/hooks';
@@ -455,11 +456,15 @@ function TradePanelInner({
     error: ctfApprovalError,
   } = useConditionalTokenApproval(negRisk);
   const { data: marketPositions } = useMarketPositions(conditionId);
+  const { balance: onChainTokenBalance } = useConditionalTokenBalance(tokenId);
 
   // Find position for the currently selected outcome
   const selectedPosition = marketPositions?.find(
     (p) => p.outcome_index === orderForm.outcomeIndex
   ) ?? null;
+
+  // Use on-chain token balance as fallback when position data is unavailable
+  const sellableSize = selectedPosition?.size ?? (onChainTokenBalance > 0 ? onChainTokenBalance : 0);
 
   const isMarket = orderForm.mode === 'market';
   const size = parseFloat(orderForm.size) || 0;
@@ -523,6 +528,7 @@ function TradePanelInner({
   const needsCTFApproval = isConnected && orderForm.side === 'SELL' && !ctfApproved && !ctfApprovalChecking;
   const insufficientBalance = isConnected && orderForm.side === 'BUY' && effectiveBalance < estimatedCost && estimatedCost > 0;
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
+  const insufficientPosition = isConnected && orderForm.side === 'SELL' && size > 0 && sellableSize > 0 && size > sellableSize;
 
   const handlePlaceOrder = () => {
     if (placeOrder.isPending) return;
@@ -682,13 +688,13 @@ function TradePanelInner({
                 </button>
               ) : null;
             })()}
-            {orderForm.side === 'SELL' && selectedPosition && selectedPosition.size > 0 && (
+            {orderForm.side === 'SELL' && sellableSize > 0 && (
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-[var(--foreground)] font-mono transition-colors"
-                onClick={() => setOrderSize(selectedPosition.size.toString())}
+                onClick={() => setOrderSize(sellableSize.toString())}
               >
-                Available: {selectedPosition.size.toFixed(2)} <span className="text-[var(--accent)]">MAX</span>
+                Available: {sellableSize.toFixed(2)} <span className="text-[var(--accent)]">MAX</span>
               </button>
             )}
           </div>
@@ -703,7 +709,9 @@ function TradePanelInner({
 
         <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Est. Cost</span>
+            <span className="text-muted-foreground">
+              {orderForm.side === 'SELL' ? 'Est. Proceeds' : 'Est. Cost'}
+            </span>
             <span>${orderEstimate?.cost.toFixed(2) ?? '0.00'}</span>
           </div>
           <div className="flex justify-between">
@@ -718,6 +726,12 @@ function TradePanelInner({
             <div className="flex justify-between pt-1 border-t border-border/50">
               <span className="text-negative">Insufficient balance</span>
               <span className="text-negative">${balance.toFixed(2)} available</span>
+            </div>
+          )}
+          {isConnected && insufficientPosition && (
+            <div className="flex justify-between pt-1 border-t border-border/50">
+              <span className="text-negative">Insufficient position</span>
+              <span className="text-negative">{sellableSize.toFixed(2)} shares available</span>
             </div>
           )}
         </div>
@@ -783,7 +797,7 @@ function TradePanelInner({
             className="w-full"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || noLiquidity || (!isMarket && !price)}
+            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
             {placeOrder.isPending ? (

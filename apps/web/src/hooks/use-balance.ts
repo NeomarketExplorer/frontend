@@ -56,15 +56,30 @@ async function fetchOnChainBalance(address: string): Promise<number> {
   return Number(formatUnits(balance, 6));
 }
 
-async function fetchOnChainAllowance(address: string): Promise<number> {
+interface OnChainAllowances {
+  ctfAllowance: number;
+  negRiskAllowance: number;
+  negRiskAdapterAllowance: number;
+}
+
+async function fetchOnChainAllowances(address: string): Promise<OnChainAllowances> {
   const client = getPublicClient();
-  const allowance = await client.readContract({
-    address: USDC_ADDRESS,
-    abi: erc20Abi,
-    functionName: 'allowance',
-    args: [address as `0x${string}`, CTF_EXCHANGE],
-  });
-  return Number(formatUnits(allowance, 6));
+  const spenders = [CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
+  const results = await Promise.all(
+    spenders.map((spender) =>
+      client.readContract({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [address as `0x${string}`, spender as `0x${string}`],
+      })
+    )
+  );
+  return {
+    ctfAllowance: Number(formatUnits(results[0], 6)),
+    negRiskAllowance: Number(formatUnits(results[1], 6)),
+    negRiskAdapterAllowance: Number(formatUnits(results[2], 6)),
+  };
 }
 
 async function fetchBalanceAllowance(
@@ -72,18 +87,18 @@ async function fetchBalanceAllowance(
   credentials: { apiKey: string; secret: string; passphrase: string } | null
 ): Promise<BalanceAllowance> {
   if (!credentials) {
-    const [walletBalance, onChainAllowance] = await Promise.all([
+    const [walletBalance, allowances] = await Promise.all([
       fetchOnChainBalance(address),
-      fetchOnChainAllowance(address),
+      fetchOnChainAllowances(address),
     ]);
     return {
       balance: walletBalance,
-      ctfAllowance: onChainAllowance ?? 0,
-      negRiskAllowance: 0,
-      negRiskAdapterAllowance: 0,
+      ctfAllowance: allowances.ctfAllowance,
+      negRiskAllowance: allowances.negRiskAllowance,
+      negRiskAdapterAllowance: allowances.negRiskAdapterAllowance,
       rawBalance: '0',
       walletBalance,
-      onChainAllowance,
+      onChainAllowance: allowances.ctfAllowance,
       balanceSource: 'onchain',
     };
   }
@@ -134,12 +149,12 @@ async function fetchBalanceAllowance(
     let onChainAllowance: number | undefined;
     if (balance === 0) {
       try {
-        const results = await Promise.all([
+        const [onChainBal, onChainAllow] = await Promise.all([
           fetchOnChainBalance(address),
-          fetchOnChainAllowance(address),
+          fetchOnChainAllowances(address),
         ]);
-        walletBalance = results[0];
-        onChainAllowance = results[1];
+        walletBalance = onChainBal;
+        onChainAllowance = onChainAllow.ctfAllowance;
       } catch {
         walletBalance = undefined;
         onChainAllowance = undefined;
@@ -156,19 +171,19 @@ async function fetchBalanceAllowance(
       onChainAllowance,
       balanceSource: 'clob',
     };
-  } catch (err) {
-    const [walletBalance, onChainAllowance] = await Promise.all([
+  } catch {
+    const [walletBalance, allowances] = await Promise.all([
       fetchOnChainBalance(address),
-      fetchOnChainAllowance(address),
+      fetchOnChainAllowances(address),
     ]);
     return {
       balance: walletBalance,
-      ctfAllowance: onChainAllowance ?? 0,
-      negRiskAllowance: 0,
-      negRiskAdapterAllowance: 0,
+      ctfAllowance: allowances.ctfAllowance,
+      negRiskAllowance: allowances.negRiskAllowance,
+      negRiskAdapterAllowance: allowances.negRiskAdapterAllowance,
       rawBalance: '0',
       walletBalance,
-      onChainAllowance,
+      onChainAllowance: allowances.ctfAllowance,
       balanceSource: 'onchain',
     };
   }

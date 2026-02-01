@@ -13,3 +13,4 @@ export * from './use-clob-market';
 export * from './use-balance';
 export * from './use-token-approval';
 export * from './use-conditional-token-approval';
+export * from './use-conditional-token-balance';
