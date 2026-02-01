@@ -27,6 +27,8 @@ import {
   useUsdcBalance,
   useTokenApproval,
   useClobMarket,
+  useMarketPositions,
+  useConditionalTokenApproval,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
@@ -231,7 +233,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         <div>
-          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} clobMarketLoaded={!clobMarketLoading && !!clobMarket} />
+          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} clobMarketLoaded={!clobMarketLoading && !!clobMarket} conditionId={market?.conditionId ?? null} />
         </div>
       </div>
     </div>
@@ -244,12 +246,14 @@ function TradePanel({
   mappedTokenIds,
   negRisk,
   clobMarketLoaded,
+  conditionId,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   mappedTokenIds: string[];
   negRisk: boolean;
   clobMarketLoaded: boolean;
+  conditionId: string | null;
 }) {
   const privyAvailable = usePrivyAvailable();
   const { data: orderbook } = useOrderbook(tokenId);
@@ -274,6 +278,7 @@ function TradePanel({
       liveMidpoints={liveMidpoints}
       negRisk={negRisk}
       clobMarketLoaded={clobMarketLoaded}
+      conditionId={conditionId}
     />
   );
 }
@@ -350,6 +355,7 @@ function TradePanelInner({
   liveMidpoints,
   negRisk,
   clobMarketLoaded,
+  conditionId,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
@@ -357,6 +363,7 @@ function TradePanelInner({
   liveMidpoints: (number | null)[];
   negRisk: boolean;
   clobMarketLoaded: boolean;
+  conditionId: string | null;
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
@@ -371,6 +378,19 @@ function TradePanelInner({
     isLoading: balanceLoading,
   } = useUsdcBalance();
   const { approve, isApproving, error: approvalError } = useTokenApproval(negRisk);
+  const {
+    isApproved: ctfApproved,
+    isChecking: ctfApprovalChecking,
+    approve: approveCTF,
+    isApproving: isApprovingCTF,
+    error: ctfApprovalError,
+  } = useConditionalTokenApproval(negRisk);
+  const { data: marketPositions } = useMarketPositions(conditionId);
+
+  // Find position for the currently selected outcome
+  const selectedPosition = marketPositions?.find(
+    (p) => p.outcome_index === orderForm.outcomeIndex
+  ) ?? null;
 
   const isMarket = orderForm.mode === 'market';
   const size = parseFloat(orderForm.size) || 0;
@@ -423,8 +443,9 @@ function TradePanelInner({
     ? Math.min(negRiskAllowance, negRiskAdapterAllowance)
     : Math.max(ctfAllowance, onChainAllowance ?? 0);
   const effectiveBalance = balance > 0 ? balance : (walletBalance ?? balance);
-  const needsApproval = isConnected && effectiveAllowance < estimatedCost && estimatedCost > 0;
-  const insufficientBalance = isConnected && effectiveBalance < estimatedCost && estimatedCost > 0;
+  const needsApproval = isConnected && orderForm.side === 'BUY' && effectiveAllowance < estimatedCost && estimatedCost > 0;
+  const needsCTFApproval = isConnected && orderForm.side === 'SELL' && !ctfApproved && !ctfApprovalChecking;
+  const insufficientBalance = isConnected && orderForm.side === 'BUY' && effectiveBalance < estimatedCost && estimatedCost > 0;
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
 
   const handlePlaceOrder = () => {
@@ -569,7 +590,32 @@ function TradePanelInner({
         )}
 
         <div>
-          <label className="text-sm font-medium mb-1.5 block">Shares</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-medium">Shares</label>
+            {orderForm.side === 'BUY' && price > 0 && effectiveBalance > 0 && (() => {
+              const reserveUsdc = 0.50;
+              const spendable = Math.max(0, effectiveBalance - reserveUsdc);
+              const maxShares = Math.floor(spendable / (price / 100));
+              return maxShares > 0 ? (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-[var(--foreground)] font-mono transition-colors"
+                  onClick={() => setOrderSize(maxShares.toString())}
+                >
+                  Max: {maxShares} <span className="text-[var(--accent)]">MAX</span>
+                </button>
+              ) : null;
+            })()}
+            {orderForm.side === 'SELL' && selectedPosition && selectedPosition.size > 0 && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-[var(--foreground)] font-mono transition-colors"
+                onClick={() => setOrderSize(selectedPosition.size.toString())}
+              >
+                Available: {selectedPosition.size.toFixed(2)} <span className="text-[var(--accent)]">MAX</span>
+              </button>
+            )}
+          </div>
           <Input
             type="number"
             placeholder="100"
@@ -600,6 +646,34 @@ function TradePanelInner({
           )}
         </div>
 
+        {/* Your Position */}
+        {isConnected && marketPositions && marketPositions.length > 0 && (
+          <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Your Position</div>
+            {marketPositions.map((pos) => {
+              const outcomeLabel = outcomes[pos.outcome_index]?.label ?? `Outcome ${pos.outcome_index}`;
+              const pnl = pos.pnl ?? 0;
+              return (
+                <div key={pos.outcome_index} className="flex items-center justify-between">
+                  <div>
+                    <span className="font-mono">{pos.size.toFixed(2)}</span>
+                    <span className="text-muted-foreground ml-1">{outcomeLabel}</span>
+                    {pos.avg_price != null && (
+                      <span className="text-muted-foreground text-xs ml-1">@ {(pos.avg_price * 100).toFixed(0)}c</span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono">${(pos.current_value ?? 0).toFixed(2)}</span>
+                    <span className={`ml-1.5 text-xs ${pnl >= 0 ? 'text-positive' : 'text-negative'}`}>
+                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {needsApproval ? (
           <Button
             className="w-full"
@@ -613,6 +687,20 @@ function TradePanelInner({
             }}
           >
             {isApproving ? 'Approving USDC...' : 'Approve USDC'}
+          </Button>
+        ) : needsCTFApproval ? (
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={isApprovingCTF}
+            onClick={async () => {
+              const hash = await approveCTF();
+              if (hash) {
+                toast({ variant: 'success', title: 'Token approval confirmed', description: `TX: ${hash.slice(0, 10)}...` });
+              }
+            }}
+          >
+            {isApprovingCTF ? 'Approving...' : 'Approve tokens for selling'}
           </Button>
         ) : (
           <Button
@@ -636,6 +724,10 @@ function TradePanelInner({
 
         {approvalError && (
           <p className="text-xs text-negative text-center">{approvalError}</p>
+        )}
+
+        {ctfApprovalError && (
+          <p className="text-xs text-negative text-center">{ctfApprovalError}</p>
         )}
 
         {!isConnected && (

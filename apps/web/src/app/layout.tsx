@@ -22,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'PolyExplorer // Prediction Markets',
-  description: 'Real-time prediction market data and analytics',
+  title: 'Neomarket // Prediction Markets',
+  description: 'Trade prediction markets on Polymarket',
 };
 
 export default function RootLayout({
@@ -71,10 +71,10 @@ export default function RootLayout({
                       </div>
                       <div className="flex items-baseline gap-0.5">
                         <span className="font-mono text-sm font-bold tracking-tight text-[var(--foreground)]">
-                          POLY
+                          NEO
                         </span>
                         <span className="font-mono text-sm font-bold tracking-tight text-[var(--accent)]">
-                          EXPLORER
+                          MARKET
                         </span>
                       </div>
                     </a>

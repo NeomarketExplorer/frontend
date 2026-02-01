@@ -2,6 +2,7 @@
  * TanStack Query hooks for positions and portfolio data
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
@@ -81,6 +82,26 @@ export function usePositionsByMarket() {
   return {
     data: groupedPositions,
     positions,
+    ...rest,
+  };
+}
+
+/**
+ * Get user's positions for a specific market (condition)
+ * Filters all positions by condition_id. Returns empty array if no position.
+ */
+export function useMarketPositions(conditionId: string | null) {
+  const { data: positions, ...rest } = usePositions();
+
+  const marketPositions = useMemo(() => {
+    if (!positions || !conditionId) return [];
+    return positions.filter(
+      (p) => p.condition_id.toLowerCase() === conditionId.toLowerCase()
+    );
+  }, [positions, conditionId]);
+
+  return {
+    data: marketPositions,
     ...rest,
   };
 }

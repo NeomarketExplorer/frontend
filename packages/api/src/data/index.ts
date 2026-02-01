@@ -20,7 +20,7 @@ export const PositionSchema = z.object({
   pnl_percent: z.number().optional(),
   realized_pnl: z.number().optional(),
   unrealized_pnl: z.number().optional(),
-});
+}).passthrough();
 
 export const ActivitySchema = z.object({
   id: z.string().optional(),
@@ -34,7 +34,7 @@ export const ActivitySchema = z.object({
   value: z.number().optional(),
   fee: z.number().optional(),
   transaction_hash: z.string().optional(),
-});
+}).passthrough();
 
 export const UserBalanceSchema = z.object({
   usdc: z.number(),
