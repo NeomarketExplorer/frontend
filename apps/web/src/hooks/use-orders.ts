@@ -18,8 +18,40 @@ import {
   signClobRequest,
   ORDER_TYPES,
 } from '@app/trading';
-import { CTF_EXCHANGE_DOMAIN } from '@app/config';
+import { CTF_EXCHANGE_DOMAIN, CHAIN_CONFIG } from '@app/config';
 import { useWalletStore, useClobCredentialStore } from '@/stores';
+import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
+import { polygon } from 'viem/chains';
+
+const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
+const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
+const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
+
+// ERC-1155 balanceOf ABI fragment
+const CTF_BALANCE_OF_ABI = [
+  {
+    inputs: [
+      { name: 'account', type: 'address' },
+      { name: 'id', type: 'uint256' },
+    ],
+    name: 'balanceOf',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+let publicClient: ReturnType<typeof createPublicClient> | null = null;
+
+function getPublicClient() {
+  if (!publicClient) {
+    publicClient = createPublicClient({
+      chain: polygon,
+      transport: http(POLYGON_RPC_URL),
+    });
+  }
+  return publicClient;
+}
 
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
 const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
@@ -181,12 +213,47 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       options?.onStatusChange?.('Order placed!');
       return result.orderID || result.orderId;
     },
-    onSuccess: (orderId) => {
+    onSuccess: (orderId, params) => {
+      // Immediate: invalidate open orders list
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['positions'] });
+
+      // After ~1 Polygon block (~2s): read on-chain balances directly
       if (address) {
-        queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+        setTimeout(async () => {
+          try {
+            const client = getPublicClient();
+            const [usdcBal] = await Promise.all([
+              client.readContract({
+                address: USDC_ADDRESS,
+                abi: erc20Abi,
+                functionName: 'balanceOf',
+                args: [address as `0x${string}`],
+              }),
+              client.readContract({
+                address: CTF_ADDRESS,
+                abi: CTF_BALANCE_OF_ABI,
+                functionName: 'balanceOf',
+                args: [address as `0x${string}`, BigInt(params.tokenId)],
+              }),
+            ]);
+
+            // Write USDC balance into wallet store — UI updates instantly
+            useWalletStore.getState().setBalance(Number(formatUnits(usdcBal, 6)));
+
+            // Invalidate React Query caches so hooks re-render with fresh data
+            queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+            queryClient.invalidateQueries({ queryKey: ['ctf-balance', address, params.tokenId] });
+          } catch {
+            // Fallback: invalidate queries so they refetch on their own schedule
+            queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+            queryClient.invalidateQueries({ queryKey: ['ctf-balance'] });
+          }
+
+          // Background: Data API positions (avg price, P&L) — non-blocking
+          queryClient.invalidateQueries({ queryKey: ['positions'] });
+        }, 2_000);
       }
+
       options?.onSuccess?.(orderId);
     },
     onError: (error: Error) => {

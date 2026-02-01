@@ -18,15 +18,12 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useWalletStore } from '@/stores';
 import { useQueryClient } from '@tanstack/react-query';
-import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, erc20Abi, formatUnits, maxUint256 } from 'viem';
 import { polygon } from 'viem/chains';
 import { CHAIN_CONFIG } from '@app/config';
 
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
-const MAX_UINT256_HEX = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-// Function selector for approve(address,uint256) = 0x095ea7b3
-const APPROVE_SELECTOR = '0x095ea7b3';
 
 // Threshold: consider "approved" if allowance > 1M USDC (effectively unlimited)
 const APPROVAL_THRESHOLD = 1_000_000;
@@ -49,10 +46,6 @@ function getPublicClient() {
     });
   }
   return publicClient;
-}
-
-function buildApproveData(spender: string): string {
-  return APPROVE_SELECTOR + spender.slice(2).toLowerCase().padStart(64, '0') + MAX_UINT256_HEX;
 }
 
 interface UseTokenApprovalResult {
@@ -97,14 +90,11 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
       const provider = await wallet.getEthereumProvider();
       const client = getPublicClient();
 
-      // Ensure wallet is on Polygon (chain ID 137 = 0x89)
-      const chainId = (await provider.request({ method: 'eth_chainId' })) as string;
-      if (chainId !== '0x89') {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x89' }],
-        });
-      }
+      const walletClient = createWalletClient({
+        account: address as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      });
 
       // Check existing allowances for all spenders
       const allowances = await Promise.all(
@@ -133,22 +123,18 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
       let lastHash: string | null = null;
 
       for (const spender of needsApproval) {
-        const hash = (await provider.request({
-          method: 'eth_sendTransaction',
-          params: [
-            {
-              from: address,
-              to: USDC_ADDRESS,
-              data: buildApproveData(spender),
-            },
-          ],
-        })) as string;
+        const hash = await walletClient.writeContract({
+          address: USDC_ADDRESS,
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [spender as `0x${string}`, maxUint256],
+        });
 
         lastHash = hash;
         setTxHash(hash);
 
         // Wait for TX receipt before sending next TX
-        await client.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+        await client.waitForTransactionReceipt({ hash });
       }
 
       // Invalidate balance query so allowance refreshes

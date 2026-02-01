@@ -12,16 +12,13 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallets } from '@privy-io/react-auth';
-import { createPublicClient, http, erc1155Abi } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, erc1155Abi } from 'viem';
 import { polygon } from 'viem/chains';
 import { useWalletStore } from '@/stores';
 import { CHAIN_CONFIG } from '@app/config';
 
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
 const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
-
-// setApprovalForAll(address operator, bool approved) = 0xa22cb465
-const SET_APPROVAL_FOR_ALL_SELECTOR = '0xa22cb465';
 
 let publicClient: ReturnType<typeof createPublicClient> | null = null;
 
@@ -33,14 +30,6 @@ function getPublicClient() {
     });
   }
   return publicClient;
-}
-
-function buildSetApprovalForAllData(operator: string): string {
-  return (
-    SET_APPROVAL_FOR_ALL_SELECTOR +
-    operator.slice(2).toLowerCase().padStart(64, '0') +
-    '0000000000000000000000000000000000000000000000000000000000000001' // true
-  );
 }
 
 /**
@@ -124,14 +113,11 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
       const provider = await wallet.getEthereumProvider();
       const client = getPublicClient();
 
-      // Ensure wallet is on Polygon
-      const chainId = (await provider.request({ method: 'eth_chainId' })) as string;
-      if (chainId !== '0x89') {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x89' }],
-        });
-      }
+      const walletClient = createWalletClient({
+        account: address as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      });
 
       // Check which operators still need approval
       const approvalStatuses = await Promise.all(
@@ -156,22 +142,18 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
       let lastHash: string | null = null;
 
       for (const operator of unapprovedOperators) {
-        const hash = (await provider.request({
-          method: 'eth_sendTransaction',
-          params: [
-            {
-              from: address,
-              to: CTF_ADDRESS,
-              data: buildSetApprovalForAllData(operator),
-            },
-          ],
-        })) as string;
+        const hash = await walletClient.writeContract({
+          address: CTF_ADDRESS,
+          abi: erc1155Abi,
+          functionName: 'setApprovalForAll',
+          args: [operator as `0x${string}`, true],
+        });
 
         lastHash = hash;
         setTxHash(hash);
 
         // Wait for TX receipt before sending next TX
-        await client.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+        await client.waitForTransactionReceipt({ hash });
       }
 
       // Refresh the approval check after all TXs are confirmed
