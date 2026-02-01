@@ -22,53 +22,90 @@ All 7 tasks shipped and confirmed working on mainnet.
 - 3.30 USDC paid, 17.37M conditional tokens received
 - Routed through Neg Risk Fee Module 2
 
-## Sprint 6 — Order Management: PARTIAL (3/6)
+## Sprint 6 — Order Management: COMPLETE
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 6.1 | Toast notifications | DONE | Radix UI Toast, success/error variants |
-| 6.2 | Open orders display | NOT STARTED | Hook exists (`useOpenOrders`), no UI |
-| 6.3 | Order cancellation UI | NOT STARTED | Hook exists (`useCancelOrder`), no UI |
-| 6.4 | Error boundaries | DONE | Root + market page error.tsx |
-| 6.5 | Transaction confirmation UI | PARTIAL | Button pending state + toast only |
-| 6.6 | Balance auto-refresh | DONE | 30s interval, invalidates after trades |
+| 6.2 | Open orders display | DONE | Orders tab on market page + portfolio page |
+| 6.3 | Order cancellation UI | DONE | Cancel button per order, confirmation on portfolio |
+| 6.4 | Error boundaries | DONE | All routes have error.tsx |
+| 6.5 | Transaction confirmation UI | DONE | Status progression: signing → submitting → placed |
+| 6.6 | Balance auto-refresh | DONE | 30s interval, invalidates after trades + 3s delayed position refresh |
+
+## Sprint 7 — Portfolio Management: ON HOLD
+
+Waiting for ClickHouse database setup. See NEXT-STEPS.md for details.
+
+## Sprint 8 — Branding & SEO: COMPLETE
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 8.1 | Rebrand to Neomarket | DONE | Metadata, logo, favicon |
+| 8.2 | Dynamic page metadata | DONE | generateMetadata on events/[id], market/[id] (via layout), events, markets |
+| 8.3 | Open Graph + Twitter Cards | DONE | Root + per-page OG tags, title template `%s \| Neomarket` |
+| 8.4 | Sitemap + robots.txt | DONE | Dynamic sitemap from indexer, robots blocks /api + auth pages |
+| 8.5 | Custom not-found.tsx | DONE | Terminal-themed 404 page |
+| 8.6 | Structured data | DONE | JSON-LD Schema.org Event on event detail pages |
+
+## Sprint 9 — Real-time & Polish: PARTIAL
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 9.1 | Price flash animations | NOT STARTED | WebSocket hook exists, needs UI integration |
+| 9.2 | Orderbook depth chart | NOT STARTED | |
+| 9.3 | Mobile optimization | NOT STARTED | NavSearch hidden on mobile, trade panel needs work |
+| 9.4 | User onboarding | NOT STARTED | |
+| 9.5 | Loading skeletons | DONE | All routes have loading.tsx |
+| 9.6 | Dialog component | DONE | Radix Dialog exported from UI package |
+
+## Sprint 10 — Performance & DevOps: PARTIAL
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 10.1 | Bundle analysis | NOT STARTED | |
+| 10.2 | Image optimization | NOT STARTED | Some images use `unoptimized` flag |
+| 10.3 | API caching | NOT STARTED | |
+| 10.4 | E2E tests | NOT STARTED | Playwright configured but no tests written |
+| 10.5 | CI pipeline | DONE | GitHub Actions: typecheck + build on push/PR |
+| 10.6 | ESLint | DONE | next/core-web-vitals + next/typescript |
+| 10.7 | Error monitoring | NOT STARTED | Sentry not yet integrated |
 
 ## What Works (Confirmed)
 
 - Wallet connection via Privy (embedded EOA)
-- CLOB L1 -> L2 credential derivation (auto on connect)
+- CLOB L1 → L2 credential derivation (auto on connect)
 - Orderbook display with correct sort order
 - Live CLOB midpoint prices on outcome buttons
 - Market order with orderbook depth walking
 - Limit order placement
 - USDC approval for CTF Exchange, NegRiskCtfExchange, NegRiskAdapter
+- ERC-1155 approval for SELL orders (CTF Exchange or NegRisk CTF Exchange)
 - Builder attribution (server-side HMAC)
 - Balance display (CLOB balance + on-chain fallback)
+- BUY MAX button (with $0.50 USDC reserve) and SELL MAX button
+- Position display in trade panel (shares, avg price, value, P&L)
+- Open orders display + cancel on market page and portfolio page
+- Order status progression (signing → submitting → placed)
 - Price chart (Lightweight Charts)
 - Events/markets browsing via indexer
-- Header search (events only)
+- Header search (events + markets in parallel, grouped dropdown)
 - Toast notifications
+- Dynamic SEO metadata on event and market pages
+- Sitemap + robots.txt
+- Loading skeletons on all routes
+- Error boundaries on all routes
+- CI pipeline (typecheck + build)
 
-## What's Untested / Risky
+## What's Untested / Needs Work
 
 | Area | Risk | Details |
 |------|------|---------|
-| **SELL orders** | HIGH | May need ERC-1155 `setApprovalForAll()` for conditional tokens. Not implemented. |
-| **Non-neg-risk markets** | MEDIUM | Regular CTF Exchange domain used but never tested end-to-end. |
-| **Limit orders** | MEDIUM | Code path exists, `GTC` order type sent. Not tested on CLOB. |
-| **Portfolio page** | MEDIUM | Calls `data-api.polymarket.com` directly (CORS OK). Zod schemas lack `.passthrough()`. |
-| **Trades tab** | LOW | CLOB `/trades` may require L2 auth; falls back to empty `[]`. |
-| **WebSocket updates** | LOW | Connection logic exists, unclear if actually receiving data. |
-| **Data API Zod schemas** | MEDIUM | No `.passthrough()` — extra fields from API will cause parse failures. |
-
-## Known Bugs
-
-1. ~~**Branding**: Root metadata says "PolyExplorer"~~ FIXED — now "Neomarket"
-2. ~~**Logo**: Header says "POLYEXPLORER"~~ FIXED — now "NEOMARKET"
-3. **No not-found.tsx**: 404s show default Next.js page
-4. **Trades tab empty**: CLOB `/trades` likely needs L2 auth, hook catches error silently
-5. **Market search unused**: `useSearchMarkets` hook exists, not wired to any UI
-6. **Mobile search hidden**: NavSearch hidden on mobile viewports
+| **Non-neg-risk markets** | MEDIUM | Regular CTF Exchange domain used but not tested end-to-end |
+| **Limit orders** | MEDIUM | Code path exists, GTC order type sent, not tested on CLOB |
+| **Trades tab** | LOW | CLOB `/trades` may require L2 auth; waiting for ClickHouse |
+| **Mobile UX** | MEDIUM | NavSearch hidden on mobile, trade panel not optimized |
+| **WebSocket updates** | LOW | Connection logic exists, price invalidation working |
 
 ## Architecture Notes
 
@@ -82,13 +119,11 @@ Polymarket Data API (data-api.polymarket.com)
   usePositions() hook
   useActivity() hook
   usePortfolio() hook
+  useMarketPositions(conditionId) hook
         |
         v
   Portfolio page / Market page position display
 ```
-
-No proxy needed — Data API allows all origins. But adding `/api/data/` proxy
-would improve consistency and enable server-side caching.
 
 ### Data Flow for Trading
 ```
