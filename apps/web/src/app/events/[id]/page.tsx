@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getEvent, formatVolume } from '@/lib/indexer';
+import { getEvent, formatVolume, isPlaceholderMarket } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -72,6 +72,7 @@ export default async function EventPage({
 }) {
   const { id } = await params;
   const event = await getEvent(id);
+  const visibleMarkets = event.markets?.filter((m) => !isPlaceholderMarket(m)) ?? [];
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -144,7 +145,7 @@ export default async function EventPage({
               <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <StatItem label="Volume" value={formatVolume(event.volume)} color="cyan" />
                 <StatItem label="Liquidity" value={formatVolume(event.liquidity)} color="green" />
-                <StatItem label="Markets" value={String(event.markets?.length || 0)} color="pink" />
+                <StatItem label="Markets" value={String(visibleMarkets.length)} color="pink" />
               </div>
             </div>
           </div>
@@ -167,12 +168,12 @@ export default async function EventPage({
         <div className="flex items-center gap-2 mb-4">
           <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--accent)] rounded-full" />
           <h2 className="text-lg sm:text-xl font-bold">Markets</h2>
-          <span className="font-mono text-xs text-[var(--foreground-muted)]">({event.markets?.length || 0})</span>
+          <span className="font-mono text-xs text-[var(--foreground-muted)]">({visibleMarkets.length})</span>
         </div>
 
-        {event.markets && event.markets.length > 0 ? (
+        {visibleMarkets.length > 0 ? (
           <div className="space-y-3">
-            {[...event.markets]
+            {[...visibleMarkets]
               .sort((a, b) => {
                 const aMax = getMaxOutcomePrice(buildOutcomeEntries(a.outcomes, a.outcomePrices));
                 const bMax = getMaxOutcomePrice(buildOutcomeEntries(b.outcomes, b.outcomePrices));

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { formatVolume, getMarkets, type IndexerMarket } from '@/lib/indexer';
+import { formatVolume, getMarkets, isPlaceholderMarket, type IndexerMarket } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
 
 type SortField = 'volume' | 'liquidity' | 'volume_24hr';
@@ -27,7 +27,7 @@ async function fetchMarkets(
   });
 
   return {
-    data: result.data,
+    data: result.data.filter((m) => !isPlaceholderMarket(m)),
     hasMore: result.pagination.hasMore,
   };
 }
