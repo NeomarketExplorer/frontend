@@ -5,47 +5,27 @@
 ### ~~1. Data API Zod schemas need `.passthrough()`~~ DONE
 Added `.passthrough()` to `PositionSchema` and `ActivitySchema` in `packages/api/src/data/index.ts`.
 
-### 2. SELL orders need ERC-1155 approval
-**Risk**: HIGH — users will try to sell their positions and get errors.
-**What's needed**: Before selling conditional tokens, the user needs to call `setApprovalForAll(operator, true)` on the CTF contract (`0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`) for the relevant exchange:
-- Regular markets: approve CTF Exchange (`0x4bFb41...`)
-- Neg-risk markets: approve NegRisk CTF Exchange (`0xC5d563...`)
-
-**Implementation**:
-- Add `useConditionalTokenApproval(negRisk)` hook
-- Check `isApprovedForAll(owner, operator)` on CTF contract
-- If not approved, prompt user to send `setApprovalForAll` TX
-- Gate SELL button on this approval
-- Different from USDC approval — this is ERC-1155, not ERC-20
+### ~~2. SELL orders need ERC-1155 approval~~ DONE
+Added `useConditionalTokenApproval(negRisk)` hook. Checks `isApprovedForAll` on CTF contract, prompts `setApprovalForAll` TX. SELL button gated on approval. Supports both regular and neg-risk markets.
 
 ### ~~3. MAX button for BUY~~ DONE
-Added BUY MAX button in market page trade panel. Calculates `Math.floor(effectiveBalance / (price / 100))` and fills shares input on click. Shows alongside the existing SELL MAX button (which fills position size).
+Added BUY MAX button in market page trade panel. Calculates `Math.floor((effectiveBalance - 0.50) / (price / 100))` with $0.50 USDC reserve. Shows alongside the existing SELL MAX button (which fills position size).
 
 ### ~~4. Rebrand PolyExplorer -> Neomarket~~ DONE
 Metadata title and header logo changed to "Neomarket" in `layout.tsx`.
 
 ---
 
-## Sprint 6 Completion
+## ~~Sprint 6 Completion~~ DONE
 
-### 5. Open Orders UI
-**Hook**: `useOpenOrders({ market, assetId })` already implemented.
-**Where to show**:
-- Market page: tab alongside Orderbook/Trades, filtered by market's token IDs
-- Portfolio page: new "Orders" tab showing all open orders
-**Each order shows**: side, price, size, filled amount, created time, cancel button.
+### ~~5. Open Orders UI~~ DONE
+Added "Orders" tab to market page and portfolio page. Shows side, price, size, filled, time, and cancel button per order.
 
-### 6. Order Cancellation UI
-**Hook**: `useCancelOrder()` already implemented.
-**Implementation**: Cancel button per order in the open orders list. Confirmation dialog before cancel. Toast on success/failure.
+### ~~6. Order Cancellation UI~~ DONE
+Cancel button per order with confirmation dialog on portfolio page. Toast on success/failure. Uses `useCancelOrder()` hook.
 
-### 7. Transaction Confirmation Flow
-**Current**: Button says "Placing Order..." then toast.
-**Better**: Show order status progression:
-1. "Sign order..." (waiting for wallet signature)
-2. "Submitting..." (waiting for CLOB response)
-3. "Order placed" (CLOB accepted)
-4. Auto-refresh positions after a short delay
+### ~~7. Transaction Confirmation Flow~~ DONE
+Order button shows status progression: "Awaiting signature..." → "Submitting order..." → "Order placed!" with spinner. Auto-refreshes positions 3s after success.
 
 ---
 
@@ -77,8 +57,8 @@ When the ClickHouse DB is ready, we can:
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| SELL orders fail (no ERC-1155 approval) | HIGH | Implement before beta launch |
-| Data API schema changes break parsing | MEDIUM | Add `.passthrough()` to Zod schemas |
+| ~~SELL orders fail (no ERC-1155 approval)~~ | ~~HIGH~~ | DONE — implemented |
+| ~~Data API schema changes break parsing~~ | ~~MEDIUM~~ | DONE — `.passthrough()` added |
 | Limit orders rejected by CLOB | MEDIUM | Test with real limit orders, handle error messages |
 | Non-neg-risk market signing fails | MEDIUM | Test a simple YES/NO binary market |
 | Position data delayed after trade | LOW | Data API indexes from chain; may take 30-60s |
@@ -88,34 +68,37 @@ When the ClickHouse DB is ready, we can:
 
 ---
 
-## Feature Backlog (Post Sprint 6)
+## Feature Backlog
 
-### Sprint 7 — Portfolio Management
+### Sprint 7 — Portfolio Management (ON HOLD — needs ClickHouse)
 - Resolved positions tab (query by resolved market IDs)
 - Position redemption (`redeemPositions()` on CTF contract)
 - Closed positions history
 - Per-market P&L breakdown
 - Portfolio value chart over time
 
-### Sprint 8 — Branding & SEO
-- Dynamic `generateMetadata()` per page
-- Open Graph / Twitter Cards
-- Sitemap + robots.txt
-- Structured data (JSON-LD)
-- Custom not-found.tsx
+### ~~Sprint 8 — Branding & SEO~~ DONE
+- [x] Dynamic `generateMetadata()` per page (events/[id], market/[id] via layout, events, markets)
+- [x] Open Graph / Twitter Cards (root + per-page, title template)
+- [x] Sitemap + robots.txt (dynamic sitemap from indexer, robots blocks /api)
+- [x] Structured data (JSON-LD Schema.org Event on event pages)
+- [x] Custom not-found.tsx
+- [x] SVG favicon with Neomarket branding
 
-### Sprint 9 — Real-time & Polish
-- Price flash animations on WebSocket updates
-- Live orderbook depth chart
-- Mobile-optimized trade panel
-- New user onboarding flow
-- Loading skeleton screens
+### ~~Sprint 9 — Real-time & Polish~~ PARTIAL
+- [ ] Price flash animations on WebSocket updates
+- [ ] Live orderbook depth chart
+- [ ] Mobile-optimized trade panel
+- [ ] New user onboarding flow
+- [x] Loading skeleton screens (all routes)
+- [x] Dialog component (Radix Dialog exported from UI package)
 
-### Sprint 10 — Performance & DevOps
-- Bundle analysis + code splitting
-- E2E tests (Playwright)
-- CI pipeline (lint, typecheck, build, test)
-- Error monitoring (Sentry)
+### ~~Sprint 10 — Performance & DevOps~~ PARTIAL
+- [ ] Bundle analysis + code splitting
+- [ ] E2E tests (Playwright)
+- [x] CI pipeline (GitHub Actions: typecheck + build on push/PR)
+- [x] ESLint configuration (next/core-web-vitals + next/typescript)
+- [ ] Error monitoring (Sentry)
 
 ---
 
