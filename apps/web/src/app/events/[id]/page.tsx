@@ -1,9 +1,69 @@
+import type { Metadata } from 'next';
 import { getEvent, formatVolume } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
 import Image from 'next/image';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const event = await getEvent(id);
+    return {
+      title: event.title,
+      description:
+        event.description || `Trade on ${event.title} at Neomarket`,
+      openGraph: {
+        title: event.title,
+        description:
+          event.description || `Trade on ${event.title} at Neomarket`,
+        ...(event.image && {
+          images: [{ url: event.image, width: 1200, height: 630 }],
+        }),
+      },
+    };
+  } catch {
+    return { title: 'Event' };
+  }
+}
+
+function EventJsonLd({ event }: { event: { id: string; title: string; description: string | null; image: string | null; closed: boolean; markets?: { endDateIso: string | null }[] } }) {
+  const endDate = event.markets?.find(m => m.endDateIso)?.endDateIso ?? null;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    description: event.description || `Prediction market event: ${event.title}`,
+    ...(event.image && { image: event.image }),
+    ...(endDate && { endDate }),
+    organizer: {
+      '@type': 'Organization',
+      name: 'Neomarket',
+      url: 'https://neomarket.bet',
+    },
+    eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
+    eventStatus: event.closed
+      ? 'https://schema.org/EventCancelled'
+      : 'https://schema.org/EventScheduled',
+    location: {
+      '@type': 'VirtualLocation',
+      url: `https://neomarket.bet/events/${event.id}`,
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  );
+}
 
 export default async function EventPage({
   params,
@@ -15,6 +75,7 @@ export default async function EventPage({
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      <EventJsonLd event={event} />
       <Link
         href="/events"
         className="inline-flex items-center gap-2 font-mono text-xs text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-wider"

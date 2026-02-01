@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import { MarketsList } from '@/components/markets-list';
+
+export const metadata: Metadata = {
+  title: 'Markets',
+  description: 'Browse prediction markets on Neomarket',
+};
 
 export default function MarketsPage() {
   return (

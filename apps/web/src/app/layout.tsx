@@ -22,8 +22,29 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Neomarket // Prediction Markets',
-  description: 'Trade prediction markets on Polymarket',
+  metadataBase: new URL('https://neomarket.bet'),
+  title: {
+    default: 'Neomarket',
+    template: '%s | Neomarket',
+  },
+  description:
+    'Trade prediction markets on Polymarket. Real-time odds, orderbook trading, and portfolio tracking.',
+  openGraph: {
+    title: 'Neomarket',
+    description:
+      'Trade prediction markets on Polymarket. Real-time odds, orderbook trading, and portfolio tracking.',
+    siteName: 'Neomarket',
+    locale: 'en_US',
+    type: 'website',
+    url: 'https://neomarket.bet',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@neomarket',
+  },
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import { EventsList } from '@/components/events-list';
 import { EventSearch } from '@/components/event-search';
+
+export const metadata: Metadata = {
+  title: 'Events',
+  description: 'Browse prediction market events on Neomarket',
+};
 
 export default async function EventsPage({
   searchParams,
