@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { formatVolume, getEvents, type IndexerEvent } from '@/lib/indexer';
+import { formatVolume, getEvents, searchMarkets, type IndexerEvent, type IndexerMarket } from '@/lib/indexer';
 
 export function NavSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IndexerEvent[]>([]);
+  const [marketResults, setMarketResults] = useState<IndexerMarket[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -17,28 +18,40 @@ export function NavSearch() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const searchEvents = useCallback(async (searchQuery: string) => {
+  const totalResults = results.length + marketResults.length;
+
+  const search = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) {
       setResults([]);
+      setMarketResults([]);
       setIsOpen(false);
       return;
     }
 
     setIsLoading(true);
     try {
-      const res = await getEvents({
-        limit: 6,
-        offset: 0,
-        search: searchQuery.trim(),
-        sort: 'volume',
-        order: 'desc',
-      });
-      setResults(res.data || []);
-      setIsOpen(true);
+      const [eventsResult, marketsResult] = await Promise.allSettled([
+        getEvents({
+          limit: 4,
+          offset: 0,
+          search: searchQuery.trim(),
+          sort: 'volume',
+          order: 'desc',
+        }),
+        searchMarkets(searchQuery.trim(), 4),
+      ]);
+
+      const events = eventsResult.status === 'fulfilled' ? (eventsResult.value.data || []) : [];
+      const markets = marketsResult.status === 'fulfilled' ? (marketsResult.value || []) : [];
+
+      setResults(events);
+      setMarketResults(markets);
+      setIsOpen(events.length > 0 || markets.length > 0);
       setSelectedIndex(-1);
     } catch (error) {
       console.error('Search error:', error);
       setResults([]);
+      setMarketResults([]);
     } finally {
       setIsLoading(false);
     }
@@ -46,10 +59,10 @@ export function NavSearch() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      searchEvents(query);
+      search(query);
     }, 200);
     return () => clearTimeout(timer);
-  }, [query, searchEvents]);
+  }, [query, search]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -72,11 +85,20 @@ export function NavSearch() {
     setQuery('');
     setIsOpen(false);
     setResults([]);
+    setMarketResults([]);
     router.push(`/events/${event.id}`);
   };
 
+  const navigateToMarket = (market: IndexerMarket) => {
+    setQuery('');
+    setIsOpen(false);
+    setResults([]);
+    setMarketResults([]);
+    router.push(`/market/${market.id}`);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen || results.length === 0) {
+    if (!isOpen || totalResults === 0) {
       if (e.key === 'Enter' && query.trim()) {
         e.preventDefault();
         router.push(`/events?search=${encodeURIComponent(query)}`);
@@ -87,7 +109,7 @@ export function NavSearch() {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex((prev) => (prev < results.length - 1 ? prev + 1 : prev));
+        setSelectedIndex((prev) => (prev < totalResults - 1 ? prev + 1 : prev));
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -95,8 +117,15 @@ export function NavSearch() {
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0 && results[selectedIndex]) {
-          navigateToEvent(results[selectedIndex]);
+        if (selectedIndex >= 0) {
+          if (selectedIndex < results.length) {
+            navigateToEvent(results[selectedIndex]);
+          } else {
+            const marketIndex = selectedIndex - results.length;
+            if (marketResults[marketIndex]) {
+              navigateToMarket(marketResults[marketIndex]);
+            }
+          }
         } else if (query.trim()) {
           router.push(`/events?search=${encodeURIComponent(query)}`);
           setIsOpen(false);
@@ -135,9 +164,9 @@ export function NavSearch() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => {
-            if (results.length > 0) setIsOpen(true);
+            if (results.length > 0 || marketResults.length > 0) setIsOpen(true);
           }}
-          placeholder="Search events..."
+          placeholder="Search markets..."
           className="w-56 pl-8 pr-3 py-1.5 bg-[var(--card)] border border-[var(--card-border)] font-mono text-xs text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all"
         />
         {query && (
@@ -145,6 +174,7 @@ export function NavSearch() {
             onClick={() => {
               setQuery('');
               setResults([]);
+              setMarketResults([]);
               setIsOpen(false);
               inputRef.current?.focus();
             }}
@@ -158,55 +188,125 @@ export function NavSearch() {
         )}
       </div>
 
-      {isOpen && results.length > 0 && (
-        <div className="absolute right-0 z-50 w-[380px] mt-2 bg-[var(--card-solid)] border border-[var(--card-border)] shadow-2xl overflow-hidden">
-          <div ref={resultsRef} className="max-h-[360px] overflow-y-auto divide-y divide-[var(--card-border)]">
-            {results.map((event, index) => (
-              <button
-                key={event.id}
-                data-result-item
-                onClick={() => navigateToEvent(event)}
-                onMouseEnter={() => setSelectedIndex(index)}
-                className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors ${
-                  index === selectedIndex ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--card)]'
-                }`}
-              >
-                <div className="flex-shrink-0 w-10 h-10 overflow-hidden bg-[var(--card)] border border-[var(--card-border)]">
-                  {event.image ? (
-                    <Image
-                      src={event.image}
-                      alt=""
-                      width={40}
-                      height={40}
-                      className="w-full h-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[var(--foreground-muted)]">
-                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="M21 15l-5-5L5 21" />
-                      </svg>
-                    </div>
-                  )}
+      {isOpen && totalResults > 0 && (
+        <div className="absolute right-0 z-50 w-[420px] mt-2 bg-[var(--card-solid)] border border-[var(--card-border)] shadow-2xl overflow-hidden">
+          <div ref={resultsRef} className="max-h-[360px] overflow-y-auto">
+            {results.length > 0 && (
+              <>
+                <div className="px-2.5 py-1.5 text-[0.6rem] font-mono text-[var(--foreground-muted)] uppercase tracking-widest bg-[var(--background)]">
+                  Events
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-xs text-[var(--foreground)] line-clamp-2 leading-tight">
-                    {event.title}
-                  </h4>
-                  <div className="mt-1 flex items-center gap-2 text-[0.6rem] font-mono text-[var(--foreground-muted)]">
-                    <span>{formatVolume(event.volume)} vol</span>
-                    {event.active && (
-                      <span className="flex items-center gap-0.5 text-[var(--success)]">
-                        <span className="w-1 h-1 rounded-full bg-[var(--success)]" />
-                        Live
-                      </span>
-                    )}
-                  </div>
+                <div className="divide-y divide-[var(--card-border)]">
+                  {results.map((event, index) => (
+                    <button
+                      key={event.id}
+                      data-result-item
+                      onClick={() => navigateToEvent(event)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors ${
+                        index === selectedIndex ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--card)]'
+                      }`}
+                    >
+                      <div className="flex-shrink-0 w-10 h-10 overflow-hidden bg-[var(--card)] border border-[var(--card-border)]">
+                        {event.image ? (
+                          <Image
+                            src={event.image}
+                            alt=""
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[var(--foreground-muted)]">
+                            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="1.5">
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-xs text-[var(--foreground)] line-clamp-2 leading-tight">
+                          {event.title}
+                        </h4>
+                        <div className="mt-1 flex items-center gap-2 text-[0.6rem] font-mono text-[var(--foreground-muted)]">
+                          <span>{formatVolume(event.volume)} vol</span>
+                          {event.active && (
+                            <span className="flex items-center gap-0.5 text-[var(--success)]">
+                              <span className="w-1 h-1 rounded-full bg-[var(--success)]" />
+                              Live
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              </button>
-            ))}
+              </>
+            )}
+
+            {marketResults.length > 0 && (
+              <>
+                <div className="px-2.5 py-1.5 text-[0.6rem] font-mono text-[var(--foreground-muted)] uppercase tracking-widest bg-[var(--background)]">
+                  Markets
+                </div>
+                <div className="divide-y divide-[var(--card-border)]">
+                  {marketResults.map((market, index) => {
+                    const flatIndex = results.length + index;
+                    return (
+                      <button
+                        key={market.id}
+                        data-result-item
+                        onClick={() => navigateToMarket(market)}
+                        onMouseEnter={() => setSelectedIndex(flatIndex)}
+                        className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors ${
+                          flatIndex === selectedIndex ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--card)]'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 overflow-hidden bg-[var(--card)] border border-[var(--card-border)]">
+                          {market.image ? (
+                            <Image
+                              src={market.image}
+                              alt=""
+                              width={40}
+                              height={40}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[var(--foreground-muted)]">
+                              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="1.5">
+                                <path d="M3 3v18h18" />
+                                <path d="M7 16l4-8 4 4 5-10" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-xs text-[var(--foreground)] line-clamp-1 leading-tight">
+                            {market.question}
+                          </h4>
+                          <div className="mt-1 flex items-center gap-2 text-[0.6rem] font-mono text-[var(--foreground-muted)]">
+                            <span className="text-[var(--accent)]">
+                              {(market.outcomePrices[0] * 100).toFixed(0)}&cent; YES
+                            </span>
+                            <span>{formatVolume(market.volume)} vol</span>
+                            {market.active && (
+                              <span className="flex items-center gap-0.5 text-[var(--success)]">
+                                <span className="w-1 h-1 rounded-full bg-[var(--success)]" />
+                                Live
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
           {query && (
             <div className="border-t border-[var(--card-border)] p-1.5">
@@ -224,9 +324,9 @@ export function NavSearch() {
         </div>
       )}
 
-      {isOpen && query && results.length === 0 && !isLoading && (
+      {isOpen && query && totalResults === 0 && !isLoading && (
         <div className="absolute right-0 z-50 w-[300px] mt-2 bg-[var(--card-solid)] border border-[var(--card-border)] shadow-xl p-4 text-center">
-          <p className="font-mono text-xs text-[var(--foreground-muted)]">No events found for &ldquo;{query}&rdquo;</p>
+          <p className="font-mono text-xs text-[var(--foreground-muted)]">No results found for &ldquo;{query}&rdquo;</p>
         </div>
       )}
     </div>
