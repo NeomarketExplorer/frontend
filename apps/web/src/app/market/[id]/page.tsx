@@ -479,13 +479,16 @@ function TradePanelInner({
     return walkOrderbookDepth(levels, size);
   }, [isMarket, size, orderbook, orderForm.side]);
 
-  // Market price: use average fill price from depth walk, or best level + slippage
+  // Market price: use average fill price from depth walk, or best level +/- slippage
+  // BUY: set price ABOVE market (willing to pay more) to ensure fill
+  // SELL: set price BELOW market (willing to accept less) to ensure fill
   const marketPrice = useMemo(() => {
     if (depthResult && depthResult.filledSize >= size) {
-      // Convert avg decimal price to cents, add small slippage buffer
-      return Math.min(Math.round(depthResult.avgPrice * 100) + MARKET_ORDER_SLIPPAGE, 99);
+      const avgCents = Math.round(depthResult.avgPrice * 100);
+      return orderForm.side === 'BUY'
+        ? Math.min(avgCents + MARKET_ORDER_SLIPPAGE, 99)
+        : Math.max(avgCents - MARKET_ORDER_SLIPPAGE, 1);
     }
-    // Fallback to best level + slippage
     return orderForm.side === 'BUY'
       ? Math.min(Math.round(bestAsk * 100) + MARKET_ORDER_SLIPPAGE, 99)
       : Math.max(Math.round(bestBid * 100) - MARKET_ORDER_SLIPPAGE, 1);
@@ -538,7 +541,7 @@ function TradePanelInner({
       side: orderForm.side,
       price,
       size,
-      orderType: isMarket ? 'FOK' : 'GTC',
+      orderType: 'GTC',
       negRisk,
     });
   };

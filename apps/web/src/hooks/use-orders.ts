@@ -26,7 +26,14 @@ const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
 const PROXY_CLOB_API_URL = '/api/clob';
 
 async function fetchClob(path: string, init: RequestInit) {
-  // Prefer direct CLOB (avoids Cloudflare blocks on server IP). Fallback to proxy on CORS/network errors.
+  // For mutating requests (POST/DELETE), never retry — a failed network request
+  // may have succeeded server-side, and retrying would duplicate the order.
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method !== 'GET') {
+    return await fetch(`${PROXY_CLOB_API_URL}${path}`, init);
+  }
+
+  // GET requests: prefer direct CLOB, fallback to proxy on CORS/network errors.
   try {
     return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
   } catch {
