@@ -38,6 +38,7 @@ interface BalanceAllowance {
   balance: number;       // USDC balance (human-readable, 6 decimals converted)
   ctfAllowance: number;  // Allowance for regular CTF Exchange
   negRiskAllowance: number; // Allowance for Neg Risk CTF Exchange
+  negRiskAdapterAllowance: number; // Allowance for Neg Risk Adapter
   rawBalance: string;    // Raw balance string from API
   walletBalance?: number; // On-chain USDC balance (fallback/display)
   onChainAllowance?: number; // On-chain allowance for CTF Exchange (fallback/display)
@@ -79,6 +80,7 @@ async function fetchBalanceAllowance(
       balance: walletBalance,
       ctfAllowance: onChainAllowance ?? 0,
       negRiskAllowance: 0,
+      negRiskAdapterAllowance: 0,
       rawBalance: '0',
       walletBalance,
       onChainAllowance,
@@ -126,6 +128,7 @@ async function fetchBalanceAllowance(
     const allowances = data.allowances ?? {};
     const ctfAllowance = parseFloat(allowances[CTF_EXCHANGE] ?? '0') / 1e6;
     const negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE] ?? '0') / 1e6;
+    const negRiskAdapterAllowance = parseFloat(allowances[NEG_RISK_ADAPTER] ?? '0') / 1e6;
 
     let walletBalance: number | undefined;
     let onChainAllowance: number | undefined;
@@ -147,6 +150,7 @@ async function fetchBalanceAllowance(
       balance,
       ctfAllowance,
       negRiskAllowance,
+      negRiskAdapterAllowance,
       rawBalance: data.balance ?? '0',
       walletBalance,
       onChainAllowance,
@@ -161,6 +165,7 @@ async function fetchBalanceAllowance(
       balance: walletBalance,
       ctfAllowance: onChainAllowance ?? 0,
       negRiskAllowance: 0,
+      negRiskAdapterAllowance: 0,
       rawBalance: '0',
       walletBalance,
       onChainAllowance,
@@ -198,6 +203,7 @@ export function useUsdcBalance() {
     balance: query.data?.balance ?? 0,
     ctfAllowance: query.data?.ctfAllowance ?? 0,
     negRiskAllowance: query.data?.negRiskAllowance ?? 0,
+    negRiskAdapterAllowance: query.data?.negRiskAdapterAllowance ?? 0,
     rawBalance: query.data?.rawBalance ?? '0',
     walletBalance: query.data?.walletBalance,
     onChainAllowance: query.data?.onChainAllowance,

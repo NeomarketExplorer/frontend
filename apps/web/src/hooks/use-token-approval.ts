@@ -3,7 +3,9 @@
 /**
  * Hook for approving USDC spend on Polymarket exchange contracts.
  * Sends approve(spender, maxUint256) TX via wallet provider.
- * Supports both CTF Exchange and Neg Risk CTF Exchange.
+ *
+ * For neg-risk markets, approves BOTH NegRiskCtfExchange AND NegRiskAdapter
+ * since both need USDC allowance for trading.
  */
 
 import { useState, useCallback } from 'react';
@@ -29,8 +31,9 @@ interface UseTokenApprovalResult {
 }
 
 /**
- * Returns a function to approve USDC for a given spender contract.
- * Defaults to CTF Exchange; pass negRisk=true for Neg Risk CTF Exchange.
+ * Returns a function to approve USDC for the required exchange contracts.
+ * - negRisk=false: approves CTF Exchange only
+ * - negRisk=true: approves Neg Risk CTF Exchange + Neg Risk Adapter (2 TXs)
  */
 export function useTokenApproval(negRisk = false): UseTokenApprovalResult {
   const { wallets } = useWallets();
@@ -39,10 +42,6 @@ export function useTokenApproval(negRisk = false): UseTokenApprovalResult {
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-
-  const spender = negRisk
-    ? CHAIN_CONFIG.polygon.negRiskCtfExchange
-    : CHAIN_CONFIG.polygon.ctfExchange;
 
   const approve = useCallback(async (): Promise<string | null> => {
     if (!address) {
@@ -74,23 +73,32 @@ export function useTokenApproval(negRisk = false): UseTokenApprovalResult {
         });
       }
 
-      const hash = (await provider.request({
-        method: 'eth_sendTransaction',
-        params: [
-          {
-            from: address,
-            to: USDC_ADDRESS,
-            data: buildApproveData(spender),
-          },
-        ],
-      })) as string;
+      // Build list of spenders that need approval
+      const spenders = negRisk
+        ? [CHAIN_CONFIG.polygon.negRiskCtfExchange, CHAIN_CONFIG.polygon.negRiskAdapter]
+        : [CHAIN_CONFIG.polygon.ctfExchange];
 
-      setTxHash(hash);
+      let lastHash: string | null = null;
+      for (const spender of spenders) {
+        const hash = (await provider.request({
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              from: address,
+              to: USDC_ADDRESS,
+              data: buildApproveData(spender),
+            },
+          ],
+        })) as string;
+        lastHash = hash;
+      }
+
+      setTxHash(lastHash);
 
       // Invalidate balance query so allowance refreshes
       await queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
 
-      return hash;
+      return lastHash;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Approval failed';
       setError(msg);
@@ -98,7 +106,7 @@ export function useTokenApproval(negRisk = false): UseTokenApprovalResult {
     } finally {
       setIsApproving(false);
     }
-  }, [address, wallets, queryClient, spender]);
+  }, [address, wallets, queryClient, negRisk]);
 
   return { approve, isApproving, error, txHash };
 }

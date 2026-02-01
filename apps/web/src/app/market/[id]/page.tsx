@@ -364,6 +364,7 @@ function TradePanelInner({
     balance,
     ctfAllowance,
     negRiskAllowance,
+    negRiskAdapterAllowance,
     walletBalance,
     onChainAllowance,
     balanceSource,
@@ -416,9 +417,10 @@ function TradePanelInner({
     : null;
 
   const estimatedCost = orderEstimate?.cost ?? 0;
-  // onChainAllowance only checks the regular CTF Exchange, so only use it as fallback for non-neg-risk
+  // For neg-risk: both NegRiskCtfExchange AND NegRiskAdapter need sufficient allowance
+  // onChainAllowance only checks regular CTF Exchange, so only use as fallback for non-neg-risk
   const effectiveAllowance = negRisk
-    ? negRiskAllowance
+    ? Math.min(negRiskAllowance, negRiskAdapterAllowance)
     : Math.max(ctfAllowance, onChainAllowance ?? 0);
   const effectiveBalance = balance > 0 ? balance : (walletBalance ?? balance);
   const needsApproval = isConnected && effectiveAllowance < estimatedCost && estimatedCost > 0;
