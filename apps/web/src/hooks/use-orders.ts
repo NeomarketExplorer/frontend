@@ -289,7 +289,8 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
       });
 
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!address && !!credentials,
     refetchInterval: 10_000,
