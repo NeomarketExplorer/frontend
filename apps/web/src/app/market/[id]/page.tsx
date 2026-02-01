@@ -56,7 +56,7 @@ export default function MarketPage({ params }: MarketPageProps) {
   const tokenIdB = outcomeTokenIds[1] ?? null;
   const { data: midpointA } = useMidpoint(tokenIdA);
   const { data: midpointB } = useMidpoint(tokenIdB);
-  const { data: clobMarket } = useClobMarket(market?.conditionId ?? null);
+  const { data: clobMarket, isLoading: clobMarketLoading } = useClobMarket(market?.conditionId ?? null);
 
   const mappedTokenIds = useMemo(() => {
     if (outcomes.length === 0) return outcomeTokenIds;
@@ -231,7 +231,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         <div>
-          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} />
+          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} clobMarketLoaded={!clobMarketLoading && !!clobMarket} />
         </div>
       </div>
     </div>
@@ -243,11 +243,13 @@ function TradePanel({
   tokenId,
   mappedTokenIds,
   negRisk,
+  clobMarketLoaded,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   mappedTokenIds: string[];
   negRisk: boolean;
+  clobMarketLoaded: boolean;
 }) {
   const privyAvailable = usePrivyAvailable();
   const { data: orderbook } = useOrderbook(tokenId);
@@ -271,6 +273,7 @@ function TradePanel({
       orderbook={orderbook ?? null}
       liveMidpoints={liveMidpoints}
       negRisk={negRisk}
+      clobMarketLoaded={clobMarketLoaded}
     />
   );
 }
@@ -346,12 +349,14 @@ function TradePanelInner({
   orderbook,
   liveMidpoints,
   negRisk,
+  clobMarketLoaded,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
   orderbook: ParsedOrderbook | null;
   liveMidpoints: (number | null)[];
   negRisk: boolean;
+  clobMarketLoaded: boolean;
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
@@ -610,7 +615,7 @@ function TradePanelInner({
             className="w-full"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-            disabled={!isConnected || !tokenId || !size || placeOrder.isPending || insufficientBalance || noLiquidity || (!isMarket && !price)}
+            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
             {placeOrder.isPending

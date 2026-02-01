@@ -57,7 +57,7 @@ export const ClobMarketSchema = z.object({
   minimum_tick_size: z.number().optional(),
   neg_risk: z.boolean().optional(),
   tokens: z.array(ClobMarketTokenSchema),
-});
+}).passthrough();
 
 export type OrderbookLevel = z.infer<typeof OrderbookLevelSchema>;
 export type Orderbook = z.infer<typeof OrderbookSchema>;
