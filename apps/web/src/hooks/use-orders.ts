@@ -217,9 +217,23 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       // Immediate: invalidate open orders list
       queryClient.invalidateQueries({ queryKey: ['orders'] });
 
-      // After ~1 Polygon block (~2s): read on-chain balances directly
       if (address) {
-        setTimeout(async () => {
+        // 1. Optimistic UI update — show expected balance instantly
+        const currentUsdc = useWalletStore.getState().usdcBalance;
+        const orderCost = (params.price / 100) * params.size;
+        const optimisticUsdc = params.side === 'BUY'
+          ? currentUsdc - orderCost
+          : currentUsdc + orderCost;
+        useWalletStore.getState().setBalance(Math.max(0, optimisticUsdc));
+
+        // 2. Poll on-chain every 2s to verify/correct with real balances.
+        //    Stops when balance changes from pre-order value or after 30s.
+        const preOrderUsdc = currentUsdc;
+        let pollCount = 0;
+        const maxPolls = 15; // 15 × 2s = 30s max
+
+        const poll = setInterval(async () => {
+          pollCount++;
           try {
             const client = getPublicClient();
             const [usdcBal] = await Promise.all([
@@ -237,20 +251,29 @@ export function usePlaceOrder(options?: UseOrderOptions) {
               }),
             ]);
 
-            // Write USDC balance into wallet store — UI updates instantly
-            useWalletStore.getState().setBalance(Number(formatUnits(usdcBal, 6)));
+            const realUsdc = Number(formatUnits(usdcBal, 6));
+            const settled = Math.abs(realUsdc - preOrderUsdc) > 0.001;
 
-            // Invalidate React Query caches so hooks re-render with fresh data
-            queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
-            queryClient.invalidateQueries({ queryKey: ['ctf-balance', address, params.tokenId] });
+            if (settled || pollCount >= maxPolls) {
+              clearInterval(poll);
+
+              // Write real on-chain balance — corrects any optimistic drift
+              useWalletStore.getState().setBalance(realUsdc);
+              queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+              queryClient.invalidateQueries({ queryKey: ['ctf-balance', address, params.tokenId] });
+
+              // Background: Data API positions (avg price, P&L)
+              queryClient.invalidateQueries({ queryKey: ['positions'] });
+            }
           } catch {
-            // Fallback: invalidate queries so they refetch on their own schedule
-            queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
-            queryClient.invalidateQueries({ queryKey: ['ctf-balance'] });
+            // Network error — keep polling, don't stop early
+            if (pollCount >= maxPolls) {
+              clearInterval(poll);
+              queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+              queryClient.invalidateQueries({ queryKey: ['ctf-balance'] });
+              queryClient.invalidateQueries({ queryKey: ['positions'] });
+            }
           }
-
-          // Background: Data API positions (avg price, P&L) — non-blocking
-          queryClient.invalidateQueries({ queryKey: ['positions'] });
         }, 2_000);
       }
 
