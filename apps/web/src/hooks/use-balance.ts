@@ -106,9 +106,8 @@ async function fetchBalanceAllowance(
   const signPath = '/balance-allowance';
   const requestUrl = '/balance-allowance?asset_type=COLLATERAL&signature_type=0';
 
-  const headers = await signClobRequest(credentials, address, 'GET', signPath);
-
   try {
+    const headers = await signClobRequest(credentials, address, 'GET', signPath);
     let res: Response;
     try {
       res = await fetch(`${DIRECT_CLOB_API_URL}${requestUrl}`, {
@@ -140,10 +139,15 @@ async function fetchBalanceAllowance(
     const balance = parseFloat(data.balance ?? '0') / 1e6;
 
     // CLOB returns allowances as { "0xAddress": "rawAmount", ... }
-    const allowances = data.allowances ?? {};
-    const ctfAllowance = parseFloat(allowances[CTF_EXCHANGE] ?? '0') / 1e6;
-    const negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE] ?? '0') / 1e6;
-    const negRiskAdapterAllowance = parseFloat(allowances[NEG_RISK_ADAPTER] ?? '0') / 1e6;
+    // Normalize keys to lowercase — CLOB may return checksummed addresses
+    const rawAllowances = data.allowances ?? {};
+    const allowances: Record<string, string> = {};
+    for (const [key, val] of Object.entries(rawAllowances)) {
+      allowances[key.toLowerCase()] = val as string;
+    }
+    const ctfAllowance = parseFloat(allowances[CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
+    const negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
+    const negRiskAdapterAllowance = parseFloat(allowances[NEG_RISK_ADAPTER.toLowerCase()] ?? '0') / 1e6;
 
     let walletBalance: number | undefined;
     let onChainAllowance: number | undefined;
