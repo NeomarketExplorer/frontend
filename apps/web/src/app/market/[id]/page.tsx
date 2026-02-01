@@ -357,13 +357,14 @@ function TradePanelInner({
   const { isConnected } = useWalletStore();
   const {
     balance,
-    allowance,
+    ctfAllowance,
+    negRiskAllowance,
     walletBalance,
     onChainAllowance,
     balanceSource,
     isLoading: balanceLoading,
   } = useUsdcBalance();
-  const { approve, isApproving, error: approvalError } = useTokenApproval();
+  const { approve, isApproving, error: approvalError } = useTokenApproval(negRisk);
 
   const isMarket = orderForm.mode === 'market';
   const size = parseFloat(orderForm.size) || 0;
@@ -410,6 +411,7 @@ function TradePanelInner({
     : null;
 
   const estimatedCost = orderEstimate?.cost ?? 0;
+  const allowance = negRisk ? negRiskAllowance : ctfAllowance;
   const effectiveAllowance = Math.max(allowance, onChainAllowance ?? 0);
   const effectiveBalance = balance > 0 ? balance : (walletBalance ?? balance);
   const needsApproval = isConnected && effectiveAllowance < estimatedCost && estimatedCost > 0;

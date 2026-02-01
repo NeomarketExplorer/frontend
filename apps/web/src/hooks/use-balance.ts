@@ -19,6 +19,8 @@ const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
 const PROXY_CLOB_API_URL = '/api/clob';
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_EXCHANGE = CHAIN_CONFIG.polygon.ctfExchange;
+const NEG_RISK_CTF_EXCHANGE = CHAIN_CONFIG.polygon.negRiskCtfExchange;
+const NEG_RISK_ADAPTER = CHAIN_CONFIG.polygon.negRiskAdapter;
 const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
 
 let publicClient: ReturnType<typeof createPublicClient> | null = null;
@@ -34,9 +36,9 @@ function getPublicClient() {
 
 interface BalanceAllowance {
   balance: number;       // USDC balance (human-readable, 6 decimals converted)
-  allowance: number;     // Token allowance for CTF Exchange
+  ctfAllowance: number;  // Allowance for regular CTF Exchange
+  negRiskAllowance: number; // Allowance for Neg Risk CTF Exchange
   rawBalance: string;    // Raw balance string from API
-  rawAllowance: string;  // Raw allowance string from API
   walletBalance?: number; // On-chain USDC balance (fallback/display)
   onChainAllowance?: number; // On-chain allowance for CTF Exchange (fallback/display)
   balanceSource: 'clob' | 'onchain';
@@ -75,9 +77,9 @@ async function fetchBalanceAllowance(
     ]);
     return {
       balance: walletBalance,
-      allowance: 0,
+      ctfAllowance: onChainAllowance ?? 0,
+      negRiskAllowance: 0,
       rawBalance: '0',
-      rawAllowance: '0',
       walletBalance,
       onChainAllowance,
       balanceSource: 'onchain',
@@ -120,6 +122,11 @@ async function fetchBalanceAllowance(
     const data = await res.json();
     const balance = parseFloat(data.balance ?? '0') / 1e6;
 
+    // CLOB returns allowances as { "0xAddress": "rawAmount", ... }
+    const allowances = data.allowances ?? {};
+    const ctfAllowance = parseFloat(allowances[CTF_EXCHANGE] ?? '0') / 1e6;
+    const negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE] ?? '0') / 1e6;
+
     let walletBalance: number | undefined;
     let onChainAllowance: number | undefined;
     if (balance === 0) {
@@ -138,9 +145,9 @@ async function fetchBalanceAllowance(
 
     return {
       balance,
-      allowance: parseFloat(data.allowance ?? '0') / 1e6,
+      ctfAllowance,
+      negRiskAllowance,
       rawBalance: data.balance ?? '0',
-      rawAllowance: data.allowance ?? '0',
       walletBalance,
       onChainAllowance,
       balanceSource: 'clob',
@@ -152,9 +159,9 @@ async function fetchBalanceAllowance(
     ]);
     return {
       balance: walletBalance,
-      allowance: 0,
+      ctfAllowance: onChainAllowance ?? 0,
+      negRiskAllowance: 0,
       rawBalance: '0',
-      rawAllowance: '0',
       walletBalance,
       onChainAllowance,
       balanceSource: 'onchain',
@@ -189,9 +196,9 @@ export function useUsdcBalance() {
 
   return {
     balance: query.data?.balance ?? 0,
-    allowance: query.data?.allowance ?? 0,
+    ctfAllowance: query.data?.ctfAllowance ?? 0,
+    negRiskAllowance: query.data?.negRiskAllowance ?? 0,
     rawBalance: query.data?.rawBalance ?? '0',
-    rawAllowance: query.data?.rawAllowance ?? '0',
     walletBalance: query.data?.walletBalance,
     onChainAllowance: query.data?.onChainAllowance,
     balanceSource: query.data?.balanceSource ?? 'clob',

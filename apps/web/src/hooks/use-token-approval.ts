@@ -1,26 +1,25 @@
 'use client';
 
 /**
- * Hook for approving USDC spend on Polymarket CTF Exchange.
- * Sends approve(spender, maxUint256) TX via Privy wallet.
+ * Hook for approving USDC spend on Polymarket exchange contracts.
+ * Sends approve(spender, maxUint256) TX via wallet provider.
+ * Supports both CTF Exchange and Neg Risk CTF Exchange.
  */
 
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useWalletStore } from '@/stores';
 import { useQueryClient } from '@tanstack/react-query';
+import { CHAIN_CONFIG } from '@app/config';
 
-const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-const CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
-
-// ERC20 approve(address,uint256) function selector + encoding
-// approve(address spender, uint256 amount) where amount = maxUint256
-const MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
+const MAX_UINT256_HEX = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 // Function selector for approve(address,uint256) = 0x095ea7b3
-const APPROVE_DATA =
-  '0x095ea7b3' +
-  CTF_EXCHANGE.slice(2).padStart(64, '0') +
-  MAX_UINT256.slice(2);
+const APPROVE_SELECTOR = '0x095ea7b3';
+
+function buildApproveData(spender: string): string {
+  return APPROVE_SELECTOR + spender.slice(2).toLowerCase().padStart(64, '0') + MAX_UINT256_HEX;
+}
 
 interface UseTokenApprovalResult {
   approve: () => Promise<string | null>;
@@ -30,16 +29,20 @@ interface UseTokenApprovalResult {
 }
 
 /**
- * Returns a function to approve USDC for CTF Exchange.
- * Uses max uint256 approval for convenience.
+ * Returns a function to approve USDC for a given spender contract.
+ * Defaults to CTF Exchange; pass negRisk=true for Neg Risk CTF Exchange.
  */
-export function useTokenApproval(): UseTokenApprovalResult {
+export function useTokenApproval(negRisk = false): UseTokenApprovalResult {
   const { wallets } = useWallets();
   const { address } = useWalletStore();
   const queryClient = useQueryClient();
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+
+  const spender = negRisk
+    ? CHAIN_CONFIG.polygon.negRiskCtfExchange
+    : CHAIN_CONFIG.polygon.ctfExchange;
 
   const approve = useCallback(async (): Promise<string | null> => {
     if (!address) {
@@ -77,7 +80,7 @@ export function useTokenApproval(): UseTokenApprovalResult {
           {
             from: address,
             to: USDC_ADDRESS,
-            data: APPROVE_DATA,
+            data: buildApproveData(spender),
           },
         ],
       })) as string;
@@ -95,7 +98,7 @@ export function useTokenApproval(): UseTokenApprovalResult {
     } finally {
       setIsApproving(false);
     }
-  }, [address, wallets, queryClient]);
+  }, [address, wallets, queryClient, spender]);
 
   return { approve, isApproving, error, txHash };
 }
