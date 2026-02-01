@@ -37,6 +37,7 @@ async function fetchClob(path: string, init: RequestInit) {
 interface UseOrderOptions {
   onSuccess?: (orderId: string) => void;
   onError?: (error: Error) => void;
+  onStatusChange?: (status: string) => void;
 }
 
 /**
@@ -75,6 +76,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       const orderStruct = buildOrderStruct(params, address, '0');
 
       // 4. Sign Order EIP-712 via wallet provider
+      options?.onStatusChange?.('Awaiting signature...');
       const provider = await wallet.getEthereumProvider();
 
       const signTypedDataFn = async (p: {
@@ -110,6 +112,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       const signedOrder = await signOrder(orderStruct, address, signTypedDataFn, params.negRisk);
 
       // 5. Build POST body
+      options?.onStatusChange?.('Submitting order...');
       const body = buildOrderRequestBody(signedOrder, credentials.apiKey, params.orderType ?? 'GTC');
       const bodyStr = JSON.stringify(body);
 
@@ -166,6 +169,7 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         throw new Error(result.error || result.errorMsg || result.message || 'Order was not accepted');
       }
 
+      options?.onStatusChange?.('Order placed!');
       return result.orderID || result.orderId;
     },
     onSuccess: (orderId) => {

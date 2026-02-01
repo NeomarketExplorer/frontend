@@ -123,7 +123,7 @@ When the ClickHouse DB is ready, we can:
 
 - [x] Rename PolyExplorer -> Neomarket in metadata/logo
 - [x] Add `.passthrough()` to Data API Zod schemas
-- [ ] Add not-found.tsx page
-- [ ] Add error.tsx to remaining routes (events, portfolio, profile, markets)
-- [ ] Show market search results in NavSearch (hook exists, just wire it)
-- [ ] Add Cmd+K shortcut for search
+- [x] Add not-found.tsx page
+- [x] Add error.tsx to remaining routes (events, portfolio, profile, markets)
+- [x] Show market search results in NavSearch (parallel events + markets search)
+- [ ] ~~Add Cmd+K shortcut for search~~ (skipped)

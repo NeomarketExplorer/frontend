@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { ConnectButton } from '@/components/connect-button';
 import { AuthGuard } from '@/components/auth-guard';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@app/ui';
-import { usePortfolio, usePositions, useActivity } from '@/hooks';
+import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Tabs, TabsList, TabsTrigger, TabsContent, toast } from '@app/ui';
+import { usePortfolio, usePositions, useActivity, useOpenOrders, useCancelOrder } from '@/hooks';
 import { useWalletStore } from '@/stores';
 
 export default function PortfolioPage() {
@@ -80,6 +80,15 @@ function PortfolioContent({
   activity: ReturnType<typeof useActivity>['data'];
   activityLoading: boolean;
 }) {
+  const { data: openOrders, isLoading: ordersLoading } = useOpenOrders();
+  const cancelOrder = useCancelOrder({
+    onSuccess: (orderId) => {
+      toast({ variant: 'success', title: 'Order cancelled', description: `Order ${orderId.slice(0, 8)}...` });
+    },
+    onError: (error) => {
+      toast({ variant: 'error', title: 'Cancel failed', description: error.message });
+    },
+  });
 
   return (
     <div>
@@ -166,6 +175,7 @@ function PortfolioContent({
           <TabsList>
             <TabsTrigger value="positions">Positions</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
           </TabsList>
 
           <TabsContent value="positions" className="mt-0">
@@ -284,6 +294,88 @@ function PortfolioContent({
                             {new Date(item.timestamp).toLocaleString()}
                           </div>
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="orders" className="mt-0">
+            {ordersLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="py-4">
+                      <div className="animate-pulse flex items-center justify-between">
+                        <div className="space-y-2">
+                          <div className="h-5 w-48 bg-muted rounded" />
+                          <div className="h-4 w-32 bg-muted rounded" />
+                        </div>
+                        <div className="space-y-2 text-right">
+                          <div className="h-5 w-20 bg-muted rounded ml-auto" />
+                          <div className="h-5 w-16 bg-muted rounded ml-auto" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : !openOrders || openOrders.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <p className="text-muted-foreground mb-4">No open orders.</p>
+                  <Link href="/markets">
+                    <Button>Browse Markets</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-2">
+                  <div className="divide-y">
+                    <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground font-mono">
+                      <span className="w-14">Side</span>
+                      <span className="flex-1">Price</span>
+                      <span className="flex-1">Size</span>
+                      <span className="flex-1">Filled</span>
+                      <span className="flex-1">Time</span>
+                      <span className="w-16"></span>
+                    </div>
+                    {openOrders.map((order: { id: string; side: string; price: string; original_size: string; size_matched: string; created_at: number }) => (
+                      <div key={order.id} className="flex items-center gap-3 py-3 font-mono text-sm">
+                        <Badge
+                          variant={order.side === 'BUY' ? 'positive' : 'negative'}
+                          className="w-14 justify-center text-xs"
+                        >
+                          {order.side}
+                        </Badge>
+                        <span className="flex-1">
+                          {(parseFloat(order.price) * 100).toFixed(0)}c
+                        </span>
+                        <span className="flex-1">
+                          {parseFloat(order.original_size).toFixed(2)}
+                        </span>
+                        <span className="flex-1 text-muted-foreground">
+                          {parseFloat(order.size_matched).toFixed(2)}
+                        </span>
+                        <span className="flex-1 text-muted-foreground text-xs">
+                          {new Date(order.created_at * 1000).toLocaleString()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-16 h-7 text-xs text-negative hover:text-negative"
+                          disabled={cancelOrder.isPending}
+                          onClick={() => {
+                            if (window.confirm('Cancel this order?')) {
+                              cancelOrder.mutate(order.id);
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     ))}
                   </div>

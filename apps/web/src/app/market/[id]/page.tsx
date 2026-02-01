@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { PriceChart } from '@/components/price-chart';
 import {
   Button,
@@ -29,6 +30,8 @@ import {
   useClobMarket,
   useMarketPositions,
   useConditionalTokenApproval,
+  useOpenOrders,
+  useCancelOrder,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
@@ -103,6 +106,16 @@ export default function MarketPage({ params }: MarketPageProps) {
 
   useRealtimeOrderbook(tokenId);
 
+  const { data: openOrders, isLoading: ordersLoading } = useOpenOrders();
+  const cancelOrder = useCancelOrder({
+    onSuccess: (orderId) => {
+      toast({ variant: 'success', title: 'Order cancelled', description: `Order ${orderId.slice(0, 8)}...` });
+    },
+    onError: (error) => {
+      toast({ variant: 'error', title: 'Cancel failed', description: error.message });
+    },
+  });
+
   if (marketLoading) {
     return (
       <div>
@@ -173,6 +186,7 @@ export default function MarketPage({ params }: MarketPageProps) {
                 <TabsList>
                   <TabsTrigger value="orderbook">Orderbook</TabsTrigger>
                   <TabsTrigger value="trades">Trades</TabsTrigger>
+                  <TabsTrigger value="orders">Orders</TabsTrigger>
                 </TabsList>
               </CardHeader>
               <CardContent>
@@ -222,6 +236,59 @@ export default function MarketPage({ params }: MarketPageProps) {
                           </Badge>
                           <span>{parseFloat(String(trade.price)).toFixed(2)}</span>
                           <span className="text-muted-foreground">{parseFloat(String(trade.size)).toFixed(0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="orders" className="mt-0">
+                  {ordersLoading ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      Loading orders...
+                    </div>
+                  ) : !openOrders || openOrders.length === 0 ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      No open orders
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-sm font-mono">
+                      <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground border-b border-border/50 mb-1">
+                        <span className="w-14">Side</span>
+                        <span className="flex-1">Price</span>
+                        <span className="flex-1">Size</span>
+                        <span className="flex-1">Filled</span>
+                        <span className="flex-1">Time</span>
+                        <span className="w-16"></span>
+                      </div>
+                      {openOrders.map((order: { id: string; side: string; price: string; original_size: string; size_matched: string; created_at: number }) => (
+                        <div key={order.id} className="flex items-center gap-3 py-1.5">
+                          <Badge
+                            variant={order.side === 'BUY' ? 'positive' : 'negative'}
+                            className="w-14 justify-center text-xs"
+                          >
+                            {order.side}
+                          </Badge>
+                          <span className="flex-1">
+                            {(parseFloat(order.price) * 100).toFixed(0)}c
+                          </span>
+                          <span className="flex-1">
+                            {parseFloat(order.original_size).toFixed(2)}
+                          </span>
+                          <span className="flex-1 text-muted-foreground">
+                            {parseFloat(order.size_matched).toFixed(2)}
+                          </span>
+                          <span className="flex-1 text-muted-foreground text-xs">
+                            {new Date(order.created_at * 1000).toLocaleString()}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-16 h-7 text-xs text-negative hover:text-negative"
+                            disabled={cancelOrder.isPending}
+                            onClick={() => cancelOrder.mutate(order.id)}
+                          >
+                            Cancel
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -367,6 +434,8 @@ function TradePanelInner({
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
+  const queryClient = useQueryClient();
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const {
     balance,
     ctfAllowance,
@@ -418,10 +487,17 @@ function TradePanelInner({
   }, [depthResult, size, bestAsk, bestBid, orderForm.side]);
 
   const placeOrder = usePlaceOrder({
+    onStatusChange: setOrderStatus,
     onSuccess: (orderId) => {
+      setOrderStatus(null);
       toast({ variant: 'success', title: 'Order placed', description: `Order ID: ${orderId}` });
+      // Delayed position refresh — CLOB needs time to settle
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['positions'] });
+      }, 3000);
     },
     onError: (error) => {
+      setOrderStatus(null);
       toast({ variant: 'error', title: 'Order failed', description: error.message });
     },
   });
@@ -710,11 +786,14 @@ function TradePanelInner({
             disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
-            {placeOrder.isPending
-              ? 'Placing Order...'
-              : isConnected
-                ? `${isMarket ? 'Market ' : ''}${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
-                : 'Connect Wallet to Trade'}
+            {placeOrder.isPending ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                {orderStatus ?? 'Placing Order...'}
+              </span>
+            ) : isConnected
+              ? `${isMarket ? 'Market ' : ''}${orderForm.side === 'BUY' ? 'Buy' : 'Sell'} ${outcomes[orderForm.outcomeIndex]?.label ?? ''}`
+              : 'Connect Wallet to Trade'}
           </Button>
         )}
 
