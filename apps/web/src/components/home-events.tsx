@@ -21,7 +21,7 @@ async function fetchEvents(
   const result = await getEvents({
     limit,
     offset,
-    closed: false,
+    active: true,
     sort,
     order: 'desc',
   });
