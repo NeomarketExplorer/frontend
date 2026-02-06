@@ -7,13 +7,11 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { createPublicClient, http } from 'viem';
-import { polygon } from 'viem/chains';
+import { usePublicClient } from 'wagmi';
 import { useWalletStore } from '@/stores';
 import { CHAIN_CONFIG } from '@app/config';
 
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
-const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
 
 // ERC-1155 balanceOf ABI fragment
 const BALANCE_OF_ABI = [
@@ -29,18 +27,6 @@ const BALANCE_OF_ABI = [
   },
 ] as const;
 
-let publicClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getPublicClient() {
-  if (!publicClient) {
-    publicClient = createPublicClient({
-      chain: polygon,
-      transport: http(POLYGON_RPC_URL),
-    });
-  }
-  return publicClient;
-}
-
 /**
  * Fetches the on-chain conditional token balance for the connected wallet.
  * @param tokenId - The ERC-1155 token ID (outcome token)
@@ -48,12 +34,13 @@ function getPublicClient() {
  */
 export function useConditionalTokenBalance(tokenId: string | null) {
   const { address } = useWalletStore();
+  const publicClient = usePublicClient();
 
   const query = useQuery({
     queryKey: ['ctf-balance', address, tokenId],
     queryFn: async () => {
-      if (!address || !tokenId) return 0;
-      const client = getPublicClient();
+      if (!address || !tokenId || !publicClient) return 0;
+      const client = publicClient;
       const balance = await client.readContract({
         address: CTF_ADDRESS,
         abi: BALANCE_OF_ABI,

@@ -6,26 +6,24 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useWallets } from '@privy-io/react-auth';
+import { useSignTypedData } from '@privy-io/react-auth';
 import {
   type OrderParams,
-  type SignedOrder,
+  type SignTypedDataFn,
   buildOrderStruct,
   validateOrderParams,
   calculateOrderEstimate,
   signOrder,
   buildOrderRequestBody,
   signClobRequest,
-  ORDER_TYPES,
 } from '@app/trading';
-import { CTF_EXCHANGE_DOMAIN, CHAIN_CONFIG } from '@app/config';
+import { CHAIN_CONFIG } from '@app/config';
 import { useWalletStore, useClobCredentialStore } from '@/stores';
-import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
-import { polygon } from 'viem/chains';
+import { usePublicClient } from 'wagmi';
+import { erc20Abi, formatUnits } from 'viem';
 
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
-const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
 
 // ERC-1155 balanceOf ABI fragment
 const CTF_BALANCE_OF_ABI = [
@@ -40,18 +38,6 @@ const CTF_BALANCE_OF_ABI = [
     type: 'function',
   },
 ] as const;
-
-let publicClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getPublicClient() {
-  if (!publicClient) {
-    publicClient = createPublicClient({
-      chain: polygon,
-      transport: http(POLYGON_RPC_URL),
-    });
-  }
-  return publicClient;
-}
 
 // Route through our proxy to avoid CORS issues with custom POLY_* headers
 const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
@@ -85,7 +71,8 @@ interface UseOrderOptions {
  * Hook for placing orders with full L2 + builder authentication
  */
 export function usePlaceOrder(options?: UseOrderOptions) {
-  const { wallets } = useWallets();
+  const { signTypedData: privySignTypedData } = useSignTypedData();
+  const publicClient = usePublicClient();
   const { address } = useWalletStore();
   const { credentials } = useClobCredentialStore();
   const queryClient = useQueryClient();
@@ -106,48 +93,21 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         throw new Error('CLOB credentials not available. Please reconnect your wallet.');
       }
 
-      const wallet = wallets.find(
-        (w) => w.address.toLowerCase() === address.toLowerCase()
-      );
-      if (!wallet) {
-        throw new Error('Wallet not found');
-      }
-
       // 3. Build order struct (nonce = "0" for EOA)
       const orderStruct = buildOrderStruct(params, address, '0');
 
-      // 4. Sign Order EIP-712 via wallet provider
+      // 4. Sign Order EIP-712 via Privy (silent for embedded wallets)
       options?.onStatusChange?.('Awaiting signature...');
-      const provider = await wallet.getEthereumProvider();
 
-      const signTypedDataFn = async (p: {
-        account: string;
-        domain: typeof CTF_EXCHANGE_DOMAIN;
-        types: typeof ORDER_TYPES;
-        primaryType: 'Order';
-        message: Record<string, unknown>;
-      }) => {
-        const sig = await provider.request({
-          method: 'eth_signTypedData_v4',
-          params: [
-            p.account,
-            JSON.stringify({
-              types: {
-                EIP712Domain: [
-                  { name: 'name', type: 'string' },
-                  { name: 'version', type: 'string' },
-                  { name: 'chainId', type: 'uint256' },
-                  { name: 'verifyingContract', type: 'address' },
-                ],
-                ...p.types,
-              },
-              primaryType: p.primaryType,
-              domain: p.domain,
-              message: p.message,
-            }),
-          ],
-        });
-        return sig as string;
+      const signTypedDataFn: SignTypedDataFn = async (p) => {
+        // Spread the Order array to make it mutable (Privy's MessageTypes requires mutable arrays)
+        const mutableTypes = { Order: [...p.types.Order] };
+        return await privySignTypedData({
+          domain: p.domain,
+          types: mutableTypes,
+          primaryType: p.primaryType,
+          message: p.message,
+        }, undefined, p.account);
       };
 
       const signedOrder = await signOrder(orderStruct, address, signTypedDataFn, params.negRisk);
@@ -235,7 +195,8 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         const poll = setInterval(async () => {
           pollCount++;
           try {
-            const client = getPublicClient();
+            if (!publicClient) return;
+            const client = publicClient;
             const [usdcBal] = await Promise.all([
               client.readContract({
                 address: USDC_ADDRESS,

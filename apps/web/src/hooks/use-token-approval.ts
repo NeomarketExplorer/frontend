@@ -2,7 +2,7 @@
 
 /**
  * Hook for approving USDC spend on all Polymarket exchange contracts.
- * Sends approve(spender, maxUint256) TX via wallet provider.
+ * Uses wagmi useWriteContract for transaction submission.
  *
  * Always approves USDC for all 4 contracts:
  * - CTF (Conditional Token Framework)
@@ -18,12 +18,12 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useWalletStore } from '@/stores';
 import { useQueryClient } from '@tanstack/react-query';
-import { createPublicClient, createWalletClient, custom, http, erc20Abi, formatUnits, maxUint256 } from 'viem';
+import { createWalletClient, custom, erc20Abi, formatUnits, maxUint256 } from 'viem';
 import { polygon } from 'viem/chains';
+import { usePublicClient } from 'wagmi';
 import { CHAIN_CONFIG } from '@app/config';
 
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
-const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
 
 // Threshold: consider "approved" if allowance > 1M USDC (effectively unlimited)
 const APPROVAL_THRESHOLD = 1_000_000;
@@ -35,18 +35,6 @@ const ALL_SPENDERS = [
   CHAIN_CONFIG.polygon.negRiskCtfExchange,
   CHAIN_CONFIG.polygon.negRiskAdapter,
 ];
-
-let publicClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getPublicClient() {
-  if (!publicClient) {
-    publicClient = createPublicClient({
-      chain: polygon,
-      transport: http(POLYGON_RPC_URL),
-    });
-  }
-  return publicClient;
-}
 
 interface UseTokenApprovalResult {
   approve: () => Promise<string | null>;
@@ -61,9 +49,10 @@ interface UseTokenApprovalResult {
  * Waits for each TX receipt before sending the next.
  */
 export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
-  const { wallets } = useWallets();
   const { address } = useWalletStore();
+  const { wallets } = useWallets();
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -73,12 +62,8 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
       setError('Wallet not connected');
       return null;
     }
-
-    const wallet = wallets.find(
-      (w) => w.address.toLowerCase() === address.toLowerCase()
-    );
-    if (!wallet) {
-      setError('Wallet not found');
+    if (!publicClient) {
+      setError('Public client not available');
       return null;
     }
 
@@ -87,19 +72,10 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
     setTxHash(null);
 
     try {
-      const provider = await wallet.getEthereumProvider();
-      const client = getPublicClient();
-
-      const walletClient = createWalletClient({
-        account: address as `0x${string}`,
-        chain: polygon,
-        transport: custom(provider),
-      });
-
       // Check existing allowances for all spenders
       const allowances = await Promise.all(
         ALL_SPENDERS.map((spender) =>
-          client.readContract({
+          publicClient.readContract({
             address: USDC_ADDRESS,
             abi: erc20Abi,
             functionName: 'allowance',
@@ -120,6 +96,18 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
         return null;
       }
 
+      // Get Privy wallet provider for TX signing
+      const wallet = wallets.find((w) => w.address.toLowerCase() === address.toLowerCase());
+      if (!wallet) {
+        throw new Error('Wallet not found. Please reconnect.');
+      }
+      const provider = await wallet.getEthereumProvider();
+      const walletClient = createWalletClient({
+        account: address as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      });
+
       let lastHash: string | null = null;
 
       for (const spender of needsApproval) {
@@ -134,7 +122,7 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
         setTxHash(hash);
 
         // Wait for TX receipt before sending next TX
-        await client.waitForTransactionReceipt({ hash });
+        await publicClient.waitForTransactionReceipt({ hash });
       }
 
       // Invalidate balance query so allowance refreshes
@@ -148,7 +136,7 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
     } finally {
       setIsApproving(false);
     }
-  }, [address, wallets, queryClient]);
+  }, [address, publicClient, wallets, queryClient]);
 
   return { approve, isApproving, error, txHash };
 }

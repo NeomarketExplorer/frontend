@@ -1,7 +1,6 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { PriceChart } from '@/components/price-chart';
 import {
   Button,
@@ -26,11 +25,11 @@ import {
   useRealtimeOrderbook,
   usePlaceOrder,
   useUsdcBalance,
-  useTokenApproval,
   useClobMarket,
   useMarketPositions,
   useConditionalTokenApproval,
   useConditionalTokenBalance,
+  useEnableTrading,
   useOpenOrders,
   useCancelOrder,
 } from '@/hooks';
@@ -435,7 +434,6 @@ function TradePanelInner({
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
-  const queryClient = useQueryClient();
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const {
     balance,
@@ -447,14 +445,11 @@ function TradePanelInner({
     balanceSource,
     isLoading: balanceLoading,
   } = useUsdcBalance();
-  const { approve, isApproving, error: approvalError } = useTokenApproval(negRisk);
   const {
     isApproved: ctfApproved,
     isChecking: ctfApprovalChecking,
-    approve: approveCTF,
-    isApproving: isApprovingCTF,
-    error: ctfApprovalError,
   } = useConditionalTokenApproval(negRisk);
+  const { enableTrading, isEnabling, error: enableError } = useEnableTrading(negRisk);
   const { data: marketPositions } = useMarketPositions(conditionId);
   const { balance: onChainTokenBalance } = useConditionalTokenBalance(tokenId);
 
@@ -763,33 +758,17 @@ function TradePanelInner({
           </div>
         )}
 
-        {needsApproval ? (
+        {(needsApproval || needsCTFApproval) ? (
           <Button
             className="w-full"
             size="lg"
-            disabled={isApproving}
+            disabled={isEnabling}
             onClick={async () => {
-              const hash = await approve();
-              if (hash) {
-                toast({ variant: 'success', title: 'USDC approved', description: `TX: ${hash.slice(0, 10)}...` });
-              }
+              await enableTrading();
+              toast({ variant: 'success', title: 'Trading enabled' });
             }}
           >
-            {isApproving ? 'Approving USDC...' : 'Approve USDC'}
-          </Button>
-        ) : needsCTFApproval ? (
-          <Button
-            className="w-full"
-            size="lg"
-            disabled={isApprovingCTF}
-            onClick={async () => {
-              const hash = await approveCTF();
-              if (hash) {
-                toast({ variant: 'success', title: 'Token approval confirmed', description: `TX: ${hash.slice(0, 10)}...` });
-              }
-            }}
-          >
-            {isApprovingCTF ? 'Approving...' : 'Approve tokens for selling'}
+            {isEnabling ? 'Enabling Trading...' : 'Enable Trading'}
           </Button>
         ) : (
           <Button
@@ -814,12 +793,8 @@ function TradePanelInner({
           <p className="text-xs text-negative text-center">{placeOrder.error.message}</p>
         )}
 
-        {approvalError && (
-          <p className="text-xs text-negative text-center">{approvalError}</p>
-        )}
-
-        {ctfApprovalError && (
-          <p className="text-xs text-negative text-center">{ctfApprovalError}</p>
+        {enableError && (
+          <p className="text-xs text-negative text-center">{enableError}</p>
         )}
 
         {!isConnected && (

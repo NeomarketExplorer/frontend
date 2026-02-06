@@ -3,6 +3,7 @@ import { JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import { QueryProvider } from '@/providers/query-provider';
 import { PrivyProvider } from '@/providers/privy-provider';
 import { ClobAuthProvider } from '@/providers/clob-auth-provider';
+import { WagmiProvider } from '@/providers/wagmi-provider';
 import { ConnectButton } from '@/components/connect-button';
 import { NavSearch } from '@/components/nav-search';
 import './globals.css';
@@ -60,6 +61,7 @@ export default function RootLayout({
       <body className="min-h-screen antialiased">
         <PrivyProvider>
           <QueryProvider>
+            <WagmiProvider>
             <ClobAuthProvider>
               <a
                 href="#main-content"
@@ -153,6 +155,7 @@ export default function RootLayout({
                 </div>
               </footer>
             </ClobAuthProvider>
+            </WagmiProvider>
           </QueryProvider>
         </PrivyProvider>
       </body>

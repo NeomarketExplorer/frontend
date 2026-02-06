@@ -10,7 +10,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { signClobRequest } from '@app/trading';
 import { CHAIN_CONFIG } from '@app/config';
-import { createPublicClient, http, erc20Abi, formatUnits } from 'viem';
+import { erc20Abi, formatUnits, type PublicClient } from 'viem';
+import { usePublicClient } from 'wagmi';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 import { useEffect } from 'react';
 
@@ -21,18 +22,6 @@ const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_EXCHANGE = CHAIN_CONFIG.polygon.ctfExchange;
 const NEG_RISK_CTF_EXCHANGE = CHAIN_CONFIG.polygon.negRiskCtfExchange;
 const NEG_RISK_ADAPTER = CHAIN_CONFIG.polygon.negRiskAdapter;
-const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
-
-let publicClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getPublicClient() {
-  if (!publicClient) {
-    publicClient = createPublicClient({
-      transport: http(POLYGON_RPC_URL),
-    });
-  }
-  return publicClient;
-}
 
 interface BalanceAllowance {
   balance: number;       // USDC balance (human-readable, 6 decimals converted)
@@ -45,8 +34,7 @@ interface BalanceAllowance {
   balanceSource: 'clob' | 'onchain';
 }
 
-async function fetchOnChainBalance(address: string): Promise<number> {
-  const client = getPublicClient();
+async function fetchOnChainBalance(address: string, client: PublicClient): Promise<number> {
   const balance = await client.readContract({
     address: USDC_ADDRESS,
     abi: erc20Abi,
@@ -62,8 +50,7 @@ interface OnChainAllowances {
   negRiskAdapterAllowance: number;
 }
 
-async function fetchOnChainAllowances(address: string): Promise<OnChainAllowances> {
-  const client = getPublicClient();
+async function fetchOnChainAllowances(address: string, client: PublicClient): Promise<OnChainAllowances> {
   const spenders = [CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER] as const;
   const results = await Promise.all(
     spenders.map((spender) =>
@@ -84,12 +71,13 @@ async function fetchOnChainAllowances(address: string): Promise<OnChainAllowance
 
 async function fetchBalanceAllowance(
   address: string,
-  credentials: { apiKey: string; secret: string; passphrase: string } | null
+  credentials: { apiKey: string; secret: string; passphrase: string } | null,
+  client: PublicClient
 ): Promise<BalanceAllowance> {
   if (!credentials) {
     const [walletBalance, allowances] = await Promise.all([
-      fetchOnChainBalance(address),
-      fetchOnChainAllowances(address),
+      fetchOnChainBalance(address, client),
+      fetchOnChainAllowances(address, client),
     ]);
     return {
       balance: walletBalance,
@@ -154,8 +142,8 @@ async function fetchBalanceAllowance(
     if (balance === 0) {
       try {
         const [onChainBal, onChainAllow] = await Promise.all([
-          fetchOnChainBalance(address),
-          fetchOnChainAllowances(address),
+          fetchOnChainBalance(address, client),
+          fetchOnChainAllowances(address, client),
         ]);
         walletBalance = onChainBal;
         onChainAllowance = onChainAllow.ctfAllowance;
@@ -177,8 +165,8 @@ async function fetchBalanceAllowance(
     };
   } catch {
     const [walletBalance, allowances] = await Promise.all([
-      fetchOnChainBalance(address),
-      fetchOnChainAllowances(address),
+      fetchOnChainBalance(address, client),
+      fetchOnChainAllowances(address, client),
     ]);
     return {
       balance: walletBalance,
@@ -202,11 +190,12 @@ async function fetchBalanceAllowance(
 export function useUsdcBalance() {
   const { address, isConnected } = useWalletStore();
   const { credentials } = useClobCredentialStore();
+  const publicClient = usePublicClient();
 
   const query = useQuery({
     queryKey: ['usdc-balance', address],
-    queryFn: () => fetchBalanceAllowance(address!, credentials),
-    enabled: !!address && isConnected,
+    queryFn: () => fetchBalanceAllowance(address!, credentials, publicClient!),
+    enabled: !!address && isConnected && !!publicClient,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });

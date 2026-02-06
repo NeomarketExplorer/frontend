@@ -10,27 +10,15 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallets } from '@privy-io/react-auth';
-import { createPublicClient, createWalletClient, custom, http, erc1155Abi } from 'viem';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createWalletClient, custom, erc1155Abi } from 'viem';
 import { polygon } from 'viem/chains';
+import { usePublicClient } from 'wagmi';
 import { useWalletStore } from '@/stores';
 import { CHAIN_CONFIG } from '@app/config';
 
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
-const POLYGON_RPC_URL = CHAIN_CONFIG.polygon.rpcUrl;
-
-let publicClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getPublicClient() {
-  if (!publicClient) {
-    publicClient = createPublicClient({
-      chain: polygon,
-      transport: http(POLYGON_RPC_URL),
-    });
-  }
-  return publicClient;
-}
 
 /**
  * Returns all operators that need ERC-1155 approval for the given market type.
@@ -58,9 +46,10 @@ interface UseConditionalTokenApprovalResult {
  * approve() sends one TX per unapproved operator and waits for each receipt.
  */
 export function useConditionalTokenApproval(negRisk = false): UseConditionalTokenApprovalResult {
-  const { wallets } = useWallets();
   const { address } = useWalletStore();
+  const { wallets } = useWallets();
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -71,11 +60,10 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
   const approvalQuery = useQuery({
     queryKey: ['ctf-approval', address, ...operators],
     queryFn: async () => {
-      if (!address) return false;
-      const client = getPublicClient();
+      if (!address || !publicClient) return false;
       const results = await Promise.all(
         operators.map((op) =>
-          client.readContract({
+          publicClient.readContract({
             address: CTF_ADDRESS,
             abi: erc1155Abi,
             functionName: 'isApprovedForAll',
@@ -96,12 +84,8 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
       setError('Wallet not connected');
       return null;
     }
-
-    const wallet = wallets.find(
-      (w) => w.address.toLowerCase() === address.toLowerCase()
-    );
-    if (!wallet) {
-      setError('Wallet not found');
+    if (!publicClient) {
+      setError('Public client not available');
       return null;
     }
 
@@ -110,19 +94,10 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
     setTxHash(null);
 
     try {
-      const provider = await wallet.getEthereumProvider();
-      const client = getPublicClient();
-
-      const walletClient = createWalletClient({
-        account: address as `0x${string}`,
-        chain: polygon,
-        transport: custom(provider),
-      });
-
       // Check which operators still need approval
       const approvalStatuses = await Promise.all(
         operators.map((op) =>
-          client.readContract({
+          publicClient.readContract({
             address: CTF_ADDRESS,
             abi: erc1155Abi,
             functionName: 'isApprovedForAll',
@@ -139,6 +114,18 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
         return null;
       }
 
+      // Get Privy wallet provider for TX signing
+      const wallet = wallets.find((w) => w.address.toLowerCase() === address.toLowerCase());
+      if (!wallet) {
+        throw new Error('Wallet not found. Please reconnect.');
+      }
+      const provider = await wallet.getEthereumProvider();
+      const walletClient = createWalletClient({
+        account: address as `0x${string}`,
+        chain: polygon,
+        transport: custom(provider),
+      });
+
       let lastHash: string | null = null;
 
       for (const operator of unapprovedOperators) {
@@ -153,7 +140,7 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
         setTxHash(hash);
 
         // Wait for TX receipt before sending next TX
-        await client.waitForTransactionReceipt({ hash });
+        await publicClient.waitForTransactionReceipt({ hash });
       }
 
       // Refresh the approval check after all TXs are confirmed
@@ -167,7 +154,7 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
     } finally {
       setIsApproving(false);
     }
-  }, [address, wallets, queryClient, operators]);
+  }, [address, publicClient, wallets, queryClient, operators]);
 
   return {
     isApproved: approvalQuery.data ?? false,

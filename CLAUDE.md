@@ -110,7 +110,7 @@ NEXT_PUBLIC_ or sent to the browser.
 1. Validate order params (price 1-99, size > 0)
 2. Build EIP-712 Order struct (domain: "Polymarket CTF Exchange", chain 137,
    verifyingContract: 0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E)
-3. Sign Order with wallet via eth_signTypedData_v4
+3. Sign Order with Privy useSignTypedData (silent for embedded wallets)
 4. Build POST /order body: { order: signedOrder, owner: apiKey, orderType: "GTC" }
 5. Generate L2 headers (user's HMAC for POST /order with body)
 6. Call /api/polymarket/sign for builder headers (same method/path/body)
@@ -166,6 +166,36 @@ GET /prices-history          # Price history
 GET /trades                  # Recent trades
 ```
 
+## Wallet & Signing Architecture
+
+**Privy v1.99.1** handles wallet connection (embedded EOA + external wallets like MetaMask).
+**wagmi v2.19.5** (plain, NOT `@privy-io/wagmi`) handles on-chain reads and contract writes.
+
+Provider tree in `layout.tsx`:
+```
+PrivyProvider > QueryProvider > WagmiProvider > ClobAuthProvider > ...content
+```
+
+### Signing
+- All EIP-712 signing uses Privy's `useSignTypedData` from `@privy-io/react-auth`
+- Silent (no popup) for Privy embedded wallets; popup for external wallets (MetaMask)
+- Privy v1 signature: `signTypedData(typedData, uiOptions?, address?) => Promise<string>`
+- Privy's `MessageTypes` requires **mutable** arrays — spread `as const` types: `{ Order: [...p.types.Order] }`
+
+### On-chain reads
+- All contract reads use wagmi's `usePublicClient()` hook — no manual `createPublicClient` singletons
+- Used in: `use-balance.ts`, `use-orders.ts` (post-order polling), `use-token-approval.ts`, `use-conditional-token-approval.ts`, `use-conditional-token-balance.ts`
+
+### Contract writes (approvals)
+- Token approvals use Privy's `useWallets` to get the provider, then viem `createWalletClient({ transport: custom(provider) })`
+- wagmi's `useWriteContract` does NOT work without `@privy-io/wagmi` (no connected account in wagmi)
+- Used in: `use-token-approval.ts` (USDC), `use-conditional-token-approval.ts` (ERC-1155)
+- Single "Enable Trading" button (`use-enable-trading.ts`) batches USDC + CTF approvals
+
+### Supported wallets
+- Privy embedded wallets (email, Google, Twitter login → auto-created EOA)
+- MetaMask, WalletConnect, Coinbase Wallet, and other injected wallets via Privy's external wallet connect
+
 ## Two-Repo Mental Model
 
 The only contract between the two repos is the HTTP API. The indexer serves JSON at :3005, the
@@ -199,8 +229,11 @@ Already deployed on Coolify. Push to main and redeploy from Coolify dashboard.
 | apps/web/src/components/connect-button.tsx | Wallet button with Privy gate |
 | apps/web/src/lib/indexer.ts | Indexer API client (all frontend ↔ indexer calls) |
 | apps/web/src/providers/privy-provider.tsx | Privy setup + usePrivyAvailable context |
+| apps/web/src/providers/wagmi-provider.tsx | wagmi WagmiProvider wrapper (client component) |
+| apps/web/src/lib/wagmi-config.ts | wagmi config (Polygon chain, SSR) |
 | apps/web/src/hooks/use-auth.ts | Auth hooks (only inside Privy-gated components) |
 | apps/web/src/hooks/use-orders.ts | Order placement hook (usePlaceOrder, useOpenOrders) |
+| apps/web/src/hooks/use-enable-trading.ts | Batched USDC + CTF approval flow (single "Enable Trading" button) |
 | apps/web/src/stores/wallet-store.ts | Zustand wallet state (balance, connection) |
 | apps/web/src/app/market/[id]/page.tsx | Market page with chart + TradePanel |
 | apps/web/src/app/events/[id]/page.tsx | Event detail with price bars |
@@ -212,7 +245,7 @@ Already deployed on Coolify. Push to main and redeploy from Coolify dashboard.
 | packages/api/src/data/index.ts | Data API client (positions, activity) |
 | packages/api/src/websocket/index.ts | WebSocket manager (real-time orderbook) |
 | packages/trading/src/orders.ts | EIP-712 order struct + signing types |
-| packages/trading/src/signing.ts | Order signing (PLACEHOLDER — needs implementation) |
+| packages/trading/src/signing.ts | Order signing (wallet-agnostic SignTypedDataFn) |
 | packages/trading/src/calculations.ts | Trade math (cost, return, P&L) |
 | packages/config/src/env.ts | Zod env schema (client + server vars) |
 | packages/config/src/index.ts | Chain config, contract addresses |
@@ -228,7 +261,7 @@ neomarket-frontend/
 │   ├── src/hooks/             # React hooks (orders, auth, websocket)
 │   ├── src/stores/            # Zustand stores (wallet, trading, ui)
 │   ├── src/lib/               # Indexer client, utils
-│   └── src/providers/         # Privy provider
+│   └── src/providers/         # Privy + wagmi providers
 ├── packages/api/              # Polymarket API clients (CLOB, Gamma, Data, WebSocket)
 ├── packages/trading/          # Trade logic, order signing, calculations
 ├── packages/ui/               # Radix UI components (Button, Card, Tabs, etc.)
@@ -296,15 +329,18 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Interactive header search (NavSearch) with dropdown
 - Market page with chart (Lightweight Charts), orderbook, trade panel
 - Homepage with stats, trending events, infinite scroll
-- Privy wallet auth (graceful degradation without app ID)
+- Privy wallet auth (embedded + external wallets, graceful degradation without app ID)
+- wagmi integration for on-chain reads (`usePublicClient`); contract writes use Privy wallet provider + viem
+- Silent EIP-712 signing via Privy `useSignTypedData` (zero popups for embedded wallets)
 - WebSocket manager with real-time orderbook updates
 - EIP-712 order struct and signing
 - Trade calculations (cost, return, P&L)
 - Portfolio with positions and activity tabs
-- CLOB L1/L2 auth + builder attribution flow
+- CLOB L1/L2 auth + builder attribution flow (L1 signing is silent for embedded wallets)
 - Order submission with L2 + builder headers
 - USDC balance + allowance fetch (CLOB /balance-allowance) with on-chain fallback display
-- USDC approval UI (Polygon chain check + approve)
+- USDC + CTF/ERC-1155 approval flow (single "Enable Trading" button batches all approvals)
+- Neg-risk exchange + conditional token (ERC-1155) approvals for SELL orders
 - Toast notifications (Toaster)
 - Terminal/hacker design aesthetic (JetBrains Mono, cyan accent, glass cards)
 - Deployed to Coolify at neomarket.bet
@@ -315,7 +351,6 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Order cancellation UI (hook exists)
 - Transaction status/confirmation UI (pending → confirmed → filled)
 - No Gnosis Safe deployment for gasless trading
-- Neg-risk exchange + ERC1155 approvals not handled
 - Root metadata says "PolyExplorer" instead of "Neomarket"
 - No error boundaries or error.tsx pages
 
@@ -347,7 +382,6 @@ This is the critical path. Nothing else matters if users can't trade.
 **Env vars already set in Coolify:** `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
 
 **Known issues in current code to fix:**
-- Neg-risk exchange approvals and ERC1155 approvals for SELL orders are not implemented.
 - Open orders and cancellations are not surfaced in the UI yet.
 - Root metadata still says "PolyExplorer".
 - No error boundaries or error.tsx pages.
@@ -507,6 +541,10 @@ These tasks are independent of Sprint 5 and can be done anytime.
 - Don't set NEXT_PUBLIC_* as runtime env vars — they must be build-time
 - Don't expose builder credentials to the client — server-side only via /api/polymarket/sign
 - Don't call useAuth/usePrivy/useWallets outside of Privy-gated components
+- Don't install `@privy-io/wagmi` — no version supports both Privy v1.x AND React 19. Use plain `wagmi` instead
+- Don't use wagmi's `useWriteContract` for transactions — wagmi has no connected account without `@privy-io/wagmi`. Use Privy's `useWallets` + viem `createWalletClient` for writes
+- Don't use raw `provider.request({ method: 'eth_signTypedData_v4' })` — use Privy's `useSignTypedData` for silent embedded wallet signing
+- Don't create `publicClient` singletons with `createPublicClient` — use wagmi's `usePublicClient` hook
 - Don't forget node-linker=hoisted in the web Dockerfile
 - Don't use CMD-SHELL in Docker health checks — use CMD array format
 - Don't hardcode the indexer URL — use INDEXER_URL env var
