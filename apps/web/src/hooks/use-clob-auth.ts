@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { useSignTypedData } from '@privy-io/react-auth';
+import { useSignTypedData, useWallets } from '@privy-io/react-auth';
 import {
   buildClobAuthTypedData,
   buildL1Headers,
@@ -33,6 +33,7 @@ async function fetchClob(path: string, init: RequestInit) {
  */
 export function useClobAuth() {
   const { signTypedData } = useSignTypedData();
+  const { wallets, ready: walletsReady } = useWallets();
   const { address, isConnected } = useWalletStore();
   const {
     credentials,
@@ -110,12 +111,15 @@ export function useClobAuth() {
       lastAddressRef.current = address;
     }
 
+    // Wait for Privy wallets to be ready before attempting derivation
+    if (!walletsReady || wallets.length === 0) return;
+
     // Derive if no credentials loaded for this address
     const currentCreds = useClobCredentialStore.getState().credentials;
     if (!currentCreds && !derivingRef.current) {
       deriveCredentials();
     }
-  }, [isConnected, address, deriveCredentials, clearCredentials, loadForAddress]);
+  }, [isConnected, address, walletsReady, wallets.length, deriveCredentials, clearCredentials, loadForAddress]);
 
   return {
     credentials,
