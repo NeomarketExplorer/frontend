@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getEvent, formatVolume, isPlaceholderMarket } from '@/lib/indexer';
+import { getEvent, formatVolume, isPlaceholderMarket, type IndexerMarket } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -73,6 +73,8 @@ export default async function EventPage({
   const { id } = await params;
   const event = await getEvent(id);
   const visibleMarkets = event.markets?.filter((m) => !isPlaceholderMarket(m)) ?? [];
+  const liveMarkets = visibleMarkets.filter((m) => !m.closed).sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+  const resolvedMarkets = visibleMarkets.filter((m) => m.closed).sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -164,99 +166,19 @@ export default async function EventPage({
         </div>
       )}
 
+      {/* Live Markets */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--accent)] rounded-full" />
           <h2 className="text-lg sm:text-xl font-bold">Markets</h2>
-          <span className="font-mono text-xs text-[var(--foreground-muted)]">({visibleMarkets.length})</span>
+          <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
         </div>
 
-        {visibleMarkets.length > 0 ? (
+        {liveMarkets.length > 0 ? (
           <div className="space-y-3">
-            {[...visibleMarkets]
-              .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0))
-              .map((market, index) => {
-                const outcomes = buildOutcomeEntries(market.outcomes, market.outcomePrices);
-                const maxPct = getMaxOutcomePrice(outcomes) * 100;
-                const isBinary = isBinaryYesNo(market.outcomes);
-
-                return (
-                  <Link
-                    key={market.id}
-                    href={`/market/${market.id}`}
-                    className="group block glass-card p-4 hover-lift animate-fade-up"
-                    style={{ animationDelay: `${index * 40}ms` }}
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                      <div className="flex-1">
-                        <h3 className="text-sm font-medium group-hover:text-[var(--accent)] transition-colors mb-2">
-                          {market.question}
-                        </h3>
-                        <span className="font-mono text-xs text-[var(--foreground-muted)]">
-                          {formatVolume(market.volume)}
-                        </span>
-                        {!isBinary && (
-                          <span className="ml-2 font-mono text-[0.55rem] text-[var(--foreground-muted)] uppercase tracking-wider">
-                            Multi-outcome
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2">
-                        {outcomes.map((outcome) => {
-                          const isYes = isYesOutcome(outcome.label);
-                          const isNo = isNoOutcome(outcome.label);
-                          const bgClass = isYes
-                            ? 'bg-[var(--success-soft)] border border-[var(--success)]/20 group-hover:border-[var(--success)]/40'
-                            : isNo
-                              ? 'bg-[var(--danger-soft)] border border-[var(--danger)]/20 group-hover:border-[var(--danger)]/40'
-                              : 'bg-[var(--card)] border border-[var(--card-border)] group-hover:border-[var(--accent)]/40';
-                          const textClass = isYes
-                            ? 'text-[var(--success)]'
-                            : isNo
-                              ? 'text-[var(--danger)]'
-                              : 'text-[var(--accent)]';
-
-                          return (
-                            <div
-                              key={outcome.key}
-                              className={`px-3 py-2 text-center min-w-[70px] transition-all ${bgClass}`}
-                            >
-                              <div className={`font-mono text-[0.6rem] uppercase mb-0.5 ${textClass}`}>
-                                {outcome.label}
-                              </div>
-                              <div className={`font-mono font-bold text-sm ${textClass}`}>
-                                {outcome.price != null ? `${(outcome.price * 100).toFixed(1)}%` : 'N/A'}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {(() => {
-                      const leading = outcomes.reduce<typeof outcomes[0] | null>(
-                        (best, o) => (!best || (o.price ?? 0) > (best.price ?? 0) ? o : best),
-                        null
-                      );
-                      const barColor = leading && isNoOutcome(leading.label)
-                        ? 'var(--danger)'
-                        : 'var(--success)';
-                      return (
-                        <div className="mt-3 price-bar">
-                          <div
-                            className="price-bar-fill"
-                            style={{
-                              width: `${maxPct}%`,
-                              background: `linear-gradient(to right, ${barColor}, ${barColor}66)`,
-                            }}
-                          />
-                        </div>
-                      );
-                    })()}
-                  </Link>
-                );
-              })}
+            {liveMarkets.map((market, index) => (
+              <MarketCard key={market.id} market={market} index={index} />
+            ))}
           </div>
         ) : (
           <div className="glass-card p-10 text-center">
@@ -273,11 +195,111 @@ export default async function EventPage({
                 <line x1="6" y1="20" x2="6" y2="16" />
               </svg>
             </div>
-            <p className="font-mono text-sm text-[var(--foreground-muted)]">No markets found</p>
+            <p className="font-mono text-sm text-[var(--foreground-muted)]">No live markets</p>
           </div>
         )}
       </div>
+
+      {/* Resolved Markets */}
+      {resolvedMarkets.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-5 bg-gradient-to-b from-[var(--foreground-muted)] to-transparent rounded-full" />
+            <h2 className="text-lg sm:text-xl font-bold text-[var(--foreground-muted)]">Resolved</h2>
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">({resolvedMarkets.length})</span>
+          </div>
+
+          <div className="space-y-3 opacity-75">
+            {resolvedMarkets.map((market, index) => (
+              <MarketCard key={market.id} market={market} index={index} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MarketCard({ market, index }: { market: IndexerMarket; index: number }) {
+  const outcomes = buildOutcomeEntries(market.outcomes, market.outcomePrices);
+  const maxPct = getMaxOutcomePrice(outcomes) * 100;
+  const isBinary = isBinaryYesNo(market.outcomes);
+
+  return (
+    <Link
+      key={market.id}
+      href={`/market/${market.id}`}
+      className="group block glass-card p-4 hover-lift animate-fade-up"
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+        <div className="flex-1">
+          <h3 className="text-sm font-medium group-hover:text-[var(--accent)] transition-colors mb-2">
+            {market.question}
+          </h3>
+          <span className="font-mono text-xs text-[var(--foreground-muted)]">
+            {formatVolume(market.volume)}
+          </span>
+          {!isBinary && (
+            <span className="ml-2 font-mono text-[0.55rem] text-[var(--foreground-muted)] uppercase tracking-wider">
+              Multi-outcome
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {outcomes.map((outcome) => {
+            const isYes = isYesOutcome(outcome.label);
+            const isNo = isNoOutcome(outcome.label);
+            const bgClass = isYes
+              ? 'bg-[var(--success-soft)] border border-[var(--success)]/20 group-hover:border-[var(--success)]/40'
+              : isNo
+                ? 'bg-[var(--danger-soft)] border border-[var(--danger)]/20 group-hover:border-[var(--danger)]/40'
+                : 'bg-[var(--card)] border border-[var(--card-border)] group-hover:border-[var(--accent)]/40';
+            const textClass = isYes
+              ? 'text-[var(--success)]'
+              : isNo
+                ? 'text-[var(--danger)]'
+                : 'text-[var(--accent)]';
+
+            return (
+              <div
+                key={outcome.key}
+                className={`px-3 py-2 text-center min-w-[70px] transition-all ${bgClass}`}
+              >
+                <div className={`font-mono text-[0.6rem] uppercase mb-0.5 ${textClass}`}>
+                  {outcome.label}
+                </div>
+                <div className={`font-mono font-bold text-sm ${textClass}`}>
+                  {outcome.price != null ? `${(outcome.price * 100).toFixed(1)}%` : 'N/A'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {(() => {
+        const leading = outcomes.reduce<typeof outcomes[0] | null>(
+          (best, o) => (!best || (o.price ?? 0) > (best.price ?? 0) ? o : best),
+          null
+        );
+        const barColor = leading && isNoOutcome(leading.label)
+          ? 'var(--danger)'
+          : 'var(--success)';
+        return (
+          <div className="mt-3 price-bar">
+            <div
+              className="price-bar-fill"
+              style={{
+                width: `${maxPct}%`,
+                background: `linear-gradient(to right, ${barColor}, ${barColor}66)`,
+              }}
+            />
+          </div>
+        );
+      })()}
+    </Link>
   );
 }
 
