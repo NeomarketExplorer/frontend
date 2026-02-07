@@ -68,8 +68,8 @@ export interface PaginatedResponse<T> {
 
 export interface IndexerStats {
   data: {
-    markets: { total: number; active: number; closed: number };
-    events: { total: number; active: number };
+    markets: { total: number; active: number; closed: number; live: number };
+    events: { total: number; active: number; closed: number; live: number };
     trades: { total: number; last24hr: number };
     volume: { total: number; last24hr: number };
     liquidity: number;

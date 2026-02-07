@@ -56,8 +56,8 @@ export default function HomePage() {
 
         {/* Stats */}
         {loading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+            {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="p-3 bg-[var(--card)] border border-[var(--card-border)]">
                 <div className="h-3 w-16 bg-[var(--card-solid)] animate-pulse rounded mb-2" />
                 <div className="h-5 w-20 bg-[var(--card-solid)] animate-pulse rounded" />
@@ -65,11 +65,12 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-            <StatCard label="Total_Events" value={stats?.events.total.toLocaleString() ?? '0'} accent="cyan" />
-            <StatCard label="Live_Events" value={stats?.events.active.toLocaleString() ?? '0'} accent="green" pulse />
-            <StatCard label="Total_Markets" value={stats?.markets.total.toLocaleString() ?? '0'} accent="cyan" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+            <StatCard label="Live_Events" value={(stats?.events.live ?? 0).toLocaleString()} accent="green" pulse />
+            <StatCard label="Live_Markets" value={(stats?.markets.live ?? 0).toLocaleString()} accent="green" pulse />
             <StatCard label="Total_Volume" value={formatVolume(stats?.volume.total ?? 0)} accent="pink" />
+            <StatCard label="Volume_24h" value={formatVolume(stats?.volume.last24hr ?? 0)} accent="cyan" />
+            <StatCard label="Liquidity" value={formatVolume(stats?.liquidity ?? 0)} accent="cyan" />
           </div>
         )}
       </section>
