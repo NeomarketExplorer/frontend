@@ -233,12 +233,16 @@ export function NavSearch() {
                         </h4>
                         <div className="mt-1 flex items-center gap-2 text-[0.6rem] font-mono text-[var(--foreground-muted)]">
                           <span>{formatVolume(event.volume)} vol</span>
-                          {event.active && (
+                          {event.closed ? (
+                            <span className="flex items-center gap-0.5 text-[var(--foreground-muted)]">
+                              Resolved
+                            </span>
+                          ) : event.active ? (
                             <span className="flex items-center gap-0.5 text-[var(--success)]">
                               <span className="w-1 h-1 rounded-full bg-[var(--success)]" />
                               Live
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </button>
@@ -293,12 +297,16 @@ export function NavSearch() {
                               {(market.outcomePrices[0] * 100).toFixed(0)}&cent; YES
                             </span>
                             <span>{formatVolume(market.volume)} vol</span>
-                            {market.active && (
+                            {market.closed ? (
+                              <span className="flex items-center gap-0.5 text-[var(--foreground-muted)]">
+                                Resolved
+                              </span>
+                            ) : market.active ? (
                               <span className="flex items-center gap-0.5 text-[var(--success)]">
                                 <span className="w-1 h-1 rounded-full bg-[var(--success)]" />
                                 Live
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </button>

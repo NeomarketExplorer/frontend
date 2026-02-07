@@ -22,6 +22,7 @@ async function fetchEvents(
     limit,
     offset,
     active: true,
+    closed: false,
     sort,
     order: 'desc',
   });
