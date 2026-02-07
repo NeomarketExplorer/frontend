@@ -6,7 +6,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSignTypedData } from '@privy-io/react-auth';
+import { useSignTypedData, useWallets } from '@privy-io/react-auth';
 import {
   type OrderParams,
   type SignTypedDataFn,
@@ -20,7 +20,8 @@ import {
 import { CHAIN_CONFIG } from '@app/config';
 import { useWalletStore, useClobCredentialStore } from '@/stores';
 import { usePublicClient } from 'wagmi';
-import { erc20Abi, formatUnits } from 'viem';
+import { createWalletClient, custom, erc20Abi, formatUnits } from 'viem';
+import { polygon } from 'viem/chains';
 
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
@@ -72,6 +73,7 @@ interface UseOrderOptions {
  */
 export function usePlaceOrder(options?: UseOrderOptions) {
   const { signTypedData: privySignTypedData } = useSignTypedData();
+  const { wallets } = useWallets();
   const publicClient = usePublicClient();
   const { address } = useWalletStore();
   const { credentials } = useClobCredentialStore();
@@ -96,18 +98,38 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       // 3. Build order struct (nonce = "0" for EOA)
       const orderStruct = buildOrderStruct(params, address, '0');
 
-      // 4. Sign Order EIP-712 via Privy (silent for embedded wallets)
+      // 4. Sign Order EIP-712 (silent for embedded wallets, popup for external)
       options?.onStatusChange?.('Awaiting signature...');
 
+      const wallet = wallets.find((w) => w.address.toLowerCase() === address.toLowerCase());
+      if (!wallet) throw new Error('Wallet not found. Please reconnect.');
+
       const signTypedDataFn: SignTypedDataFn = async (p) => {
-        // Spread the Order array to make it mutable (Privy's MessageTypes requires mutable arrays)
-        const mutableTypes = { Order: [...p.types.Order] };
-        return await privySignTypedData({
-          domain: p.domain,
-          types: mutableTypes,
-          primaryType: p.primaryType,
-          message: p.message,
-        }, undefined, p.account);
+        if (wallet.walletClientType === 'privy') {
+          // Embedded wallet — silent signing via Privy
+          const mutableTypes = { Order: [...p.types.Order] };
+          return await privySignTypedData({
+            domain: p.domain,
+            types: mutableTypes,
+            primaryType: p.primaryType,
+            message: p.message,
+          }, undefined, p.account);
+        } else {
+          // External wallet — sign via provider
+          const provider = await wallet.getEthereumProvider();
+          const wc = createWalletClient({
+            account: p.account as `0x${string}`,
+            chain: polygon,
+            transport: custom(provider),
+          });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return await wc.signTypedData({
+            domain: p.domain,
+            types: { Order: [...p.types.Order] },
+            primaryType: 'Order',
+            message: p.message,
+          } as any);
+        }
       };
 
       const signedOrder = await signOrder(orderStruct, address, signTypedDataFn, params.negRisk);

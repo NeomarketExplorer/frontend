@@ -8,6 +8,8 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useSignTypedData, useWallets } from '@privy-io/react-auth';
+import { createWalletClient, custom } from 'viem';
+import { polygon } from 'viem/chains';
 import {
   buildClobAuthTypedData,
   buildL1Headers,
@@ -57,19 +59,42 @@ export function useClobAuth() {
 
     try {
       // Sign ClobAuth EIP-712 message (L1 auth)
-      // Uses Privy's useSignTypedData — silent for embedded wallets, popup for external
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const typedData = buildClobAuthTypedData(address, timestamp);
 
-      const signature = await signTypedData({
-        domain: typedData.domain,
-        types: { ClobAuth: [...typedData.types.ClobAuth] },
-        primaryType: typedData.primaryType,
-        message: {
-          ...typedData.message,
-          nonce: typedData.message.nonce.toString(),
-        },
-      }, undefined, address);
+      const wallet = wallets.find((w) => w.address.toLowerCase() === address.toLowerCase());
+      if (!wallet) throw new Error('Wallet not found. Please reconnect.');
+
+      let signature: string;
+      if (wallet.walletClientType === 'privy') {
+        // Embedded wallet — silent signing via Privy
+        signature = await signTypedData({
+          domain: typedData.domain,
+          types: { ClobAuth: [...typedData.types.ClobAuth] },
+          primaryType: typedData.primaryType,
+          message: {
+            ...typedData.message,
+            nonce: typedData.message.nonce.toString(),
+          },
+        }, undefined, address);
+      } else {
+        // External wallet (MetaMask, WalletConnect) — sign via provider
+        const provider = await wallet.getEthereumProvider();
+        const walletClient = createWalletClient({
+          account: address as `0x${string}`,
+          chain: polygon,
+          transport: custom(provider),
+        });
+        signature = await walletClient.signTypedData({
+          domain: typedData.domain,
+          types: { ClobAuth: [...typedData.types.ClobAuth] },
+          primaryType: 'ClobAuth',
+          message: {
+            ...typedData.message,
+            nonce: BigInt(typedData.message.nonce),
+          },
+        });
+      }
 
       // Build L1 headers
       const l1Headers = buildL1Headers(address, signature, timestamp);
@@ -90,7 +115,7 @@ export function useClobAuth() {
     } finally {
       derivingRef.current = false;
     }
-  }, [address, signTypedData, setCredentials, setDeriving, setDerivationError]);
+  }, [address, wallets, signTypedData, setCredentials, setDeriving, setDerivationError]);
 
   // Derive on connect, clear on disconnect / address change
   useEffect(() => {
