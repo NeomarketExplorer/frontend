@@ -174,11 +174,7 @@ export default async function EventPage({
         {visibleMarkets.length > 0 ? (
           <div className="space-y-3">
             {[...visibleMarkets]
-              .sort((a, b) => {
-                const aMax = getMaxOutcomePrice(buildOutcomeEntries(a.outcomes, a.outcomePrices));
-                const bMax = getMaxOutcomePrice(buildOutcomeEntries(b.outcomes, b.outcomePrices));
-                return bMax - aMax;
-              })
+              .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0))
               .map((market, index) => {
                 const outcomes = buildOutcomeEntries(market.outcomes, market.outcomePrices);
                 const maxPct = getMaxOutcomePrice(outcomes) * 100;
