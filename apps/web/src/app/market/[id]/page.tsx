@@ -97,8 +97,8 @@ export default function MarketPage({ params }: MarketPageProps) {
   }, [outcomeTokenIds, outcomes, midpointA, midpointB, clobMarket]);
 
   const tokenId = mappedTokenIds[orderForm.outcomeIndex] ?? null;
-  const { data: orderbook, isLoading: orderbookLoading } = useOrderbook(tokenId);
-  const { data: trades, isLoading: tradesLoading } = useTrades(tokenId);
+  const { data: orderbook, isLoading: orderbookLoading, isError: orderbookError } = useOrderbook(tokenId);
+  const { data: trades, isLoading: tradesLoading, isError: tradesError } = useTrades(tokenId);
   const { data: priceHistory, isLoading: priceHistoryLoading } = usePriceHistory(
     market?.conditionId ?? null,
     chartInterval
@@ -195,6 +195,14 @@ export default function MarketPage({ params }: MarketPageProps) {
                     <div className="h-48 flex items-center justify-center text-muted-foreground">
                       Loading orderbook...
                     </div>
+                  ) : orderbookError ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      Failed to load orderbook
+                    </div>
+                  ) : !orderbook?.bids.length && !orderbook?.asks.length ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      No orderbook data
+                    </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -227,9 +235,17 @@ export default function MarketPage({ params }: MarketPageProps) {
                     <div className="h-48 flex items-center justify-center text-muted-foreground">
                       Loading trades...
                     </div>
+                  ) : tradesError ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      Failed to load trades
+                    </div>
+                  ) : !trades?.length ? (
+                    <div className="h-48 flex items-center justify-center text-muted-foreground">
+                      No recent trades
+                    </div>
                   ) : (
                     <div className="space-y-1 text-sm font-mono">
-                      {trades?.slice(0, 15).map((trade, i) => (
+                      {trades.slice(0, 15).map((trade, i) => (
                         <div key={i} className="flex justify-between items-center py-1">
                           <Badge variant={trade.side === 'BUY' ? 'positive' : 'negative'} className="text-xs">
                             {trade.side}
