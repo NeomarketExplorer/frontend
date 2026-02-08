@@ -177,10 +177,12 @@ PrivyProvider > QueryProvider > WagmiProvider > ClobAuthProvider > ...content
 ```
 
 ### Signing
-- All EIP-712 signing uses Privy's `useSignTypedData` from `@privy-io/react-auth`
-- Silent (no popup) for Privy embedded wallets; popup for external wallets (MetaMask)
+- Embedded wallets (Privy): use `useSignTypedData` from `@privy-io/react-auth` — silent, no popup
+- External wallets (MetaMask, Rabby, WalletConnect): use `wallet.getEthereumProvider()` + viem `walletClient.signTypedData()` — shows popup
+- Wallet type check: `wallet.walletClientType === 'privy'` distinguishes embedded vs external
 - Privy v1 signature: `signTypedData(typedData, uiOptions?, address?) => Promise<string>`
 - Privy's `MessageTypes` requires **mutable** arrays — spread `as const` types: `{ Order: [...p.types.Order] }`
+- CLOB credential derivation must wait for `useWallets().ready && wallets.length > 0`
 
 ### On-chain reads
 - All contract reads use wagmi's `usePublicClient()` hook — no manual `createPublicClient` singletons
@@ -344,11 +346,12 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Toast notifications (Toaster)
 - Terminal/hacker design aesthetic (JetBrains Mono, cyan accent, glass cards)
 - Deployed to Coolify at neomarket.bet
+- Open orders tab on market page (with cancel buttons)
+- Order cancellation via CLOB DELETE /order/{id}
+- Orderbook/trades error + empty state feedback (resolved/illiquid markets show "No orderbook data")
 
 ## What's Not Working Yet
 
-- Open orders UI (hook exists but not displayed)
-- Order cancellation UI (hook exists)
 - Transaction status/confirmation UI (pending → confirmed → filled)
 - No Gnosis Safe deployment for gasless trading
 - Root metadata says "PolyExplorer" instead of "Neomarket"
@@ -370,19 +373,18 @@ This is the critical path. Nothing else matters if users can't trade.
 
 | # | Task | Details |
 |---|------|---------|
-| 5.1 | Server-side signing endpoint | Create `apps/web/src/app/api/polymarket/sign/route.ts` — **Node.js runtime** (not Edge). Receives `{ method, path, body }`. Builds HMAC message: `timestamp + method + path + JSON.stringify(body)`. Decodes `POLYMARKET_API_SECRET` from base64, signs with HMAC-SHA256 via Web Crypto, returns URL-safe base64 signature + `POLY_BUILDER_*` headers. Add guardrails: origin allowlist, 10KB max body, 400/500 error responses. |
-| 5.2 | L1 authentication flow | Sign EIP-712 with Privy wallet. Domain: `{ name: "ClobAuthDomain", version: "1", chainId: 137 }` (no verifyingContract). Type: `ClobAuth [ address, timestamp(string), nonce(uint256), message(string) ]`. Message value: `"This message attests that I control the given wallet"`. Nonce: `0`. Build L1 headers: `POLY_ADDRESS`, `POLY_SIGNATURE`, `POLY_TIMESTAMP`, `POLY_NONCE`. |
-| 5.3 | L2 credential derivation | First try `GET /auth/derive-api-key` with L1 headers (returning user). On failure, call `POST /auth/api-key` (new user). Both return `{ apiKey, secret, passphrase }`. Store in Zustand (memory only). Clear on disconnect. Re-derive on wallet change or reconnect. |
-| 5.4 | Implement order signing | Replace placeholder in `packages/trading/src/signing.ts`. Sign EIP-712 Order struct via `eth_signTypedData_v4`. Domain: `{ name: "Polymarket CTF Exchange", version: "1", chainId: 137, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E" }`. Note: this is a DIFFERENT domain than L1 auth (ClobAuthDomain). signatureType: 0 (EOA). |
-| 5.5 | Wire up order submission | Rewrite `usePlaceOrder`: (1) validate params, (2) build + sign EIP-712 Order, (3) construct POST body: `{ order: signedOrder, owner: userApiKey, orderType: "GTC" }`, (4) generate L2 HMAC headers for the request, (5) call `/api/polymarket/sign` for builder HMAC headers, (6) merge L2 + builder headers, (7) POST to `/api/clob/order` (proxy to CLOB). Handle `{ success, orderId, errorMsg }` response. |
-| 5.6 | USDC balance + allowance | Use CLOB endpoint `GET /balance-allowance?signature_type=0` (L2 auth) — returns balance AND allowance in one call. Also query on-chain via viem as fallback for balance/allowance (display + gating so approvals unlock UI). Update `wallet-store.usdcBalance`. Refresh on connect, after trades, on 30s interval. |
-| 5.7 | Token approval flow | If allowance from 5.6 is insufficient, prompt user to approve USDC for CTF Exchange (`0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`). Send approval TX via Privy wallet provider. Show TX status. Approvals needed: USDC → CTF Exchange, USDC → Neg Risk CTF Exchange (if applicable). |
-| 5.8 | Gnosis Safe deployment (defer) | Use `@polymarket/builder-relayer-client` to deploy Safe per user for gasless trading. **Defer to Sprint 5b** — EOA trading works without it, users just pay their own Polygon gas (fractions of a cent). Implement once core trading flow is validated. |
+| 5.1 | ~~Server-side signing endpoint~~ | **DONE** — `apps/web/src/app/api/polymarket/sign/route.ts` |
+| 5.2 | ~~L1 authentication flow~~ | **DONE** — EIP-712 ClobAuth signing in `ClobAuthProvider` |
+| 5.3 | ~~L2 credential derivation~~ | **DONE** — derive-api-key with fallback to create, stored in Zustand |
+| 5.4 | ~~Implement order signing~~ | **DONE** — `packages/trading/src/signing.ts` |
+| 5.5 | ~~Wire up order submission~~ | **DONE** — `usePlaceOrder` with L2 + builder headers |
+| 5.6 | ~~USDC balance + allowance~~ | **DONE** — CLOB balance-allowance + on-chain fallback |
+| 5.7 | ~~Token approval flow~~ | **DONE** — Single "Enable Trading" button batches USDC + CTF + neg-risk approvals |
+| 5.8 | Gnosis Safe deployment (defer) | Deferred — EOA trading works, users pay own Polygon gas (fractions of a cent). |
 
 **Env vars already set in Coolify:** `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
 
 **Known issues in current code to fix:**
-- Open orders and cancellations are not surfaced in the UI yet.
 - Root metadata still says "PolyExplorer".
 - No error boundaries or error.tsx pages.
 
@@ -394,9 +396,9 @@ This is the critical path. Nothing else matters if users can't trade.
 
 | # | Task | Details |
 |---|------|---------|
-| 6.1 | Toast notification system | Add `sonner` or `react-hot-toast`. Show toasts for: order submitted, order filled, order failed, wallet connected, approval confirmed, errors. |
-| 6.2 | Open orders display | Wire `useOpenOrders()` to CLOB `GET /data/orders` (L2 auth). Params: `?market=` or `?asset_id=`. Response: `OpenOrder[]` with fields: `id, status, asset_id, side, original_size, size_matched, price, outcome, created_at, order_type`. Supports cursor pagination. Show on market page (filtered by asset_id) and portfolio (all). Known issue: >500 orders may timeout. |
-| 6.3 | Order cancellation | Call `DELETE /order/{id}` with L2 auth headers. Also available: `POST /cancel-all` and `POST /cancel-market-orders`. Confirmation dialog before cancel. Toast on success/failure. |
+| 6.1 | ~~Toast notification system~~ | **DONE** — using `toast()` from ui package. Toasts for: order placed, order failed, cancel success/failure, approval confirmed. |
+| 6.2 | ~~Open orders display~~ | **DONE** — Orders tab on market page shows open orders with side, price, size, filled, time. Uses `useOpenOrders()` hook. |
+| 6.3 | ~~Order cancellation~~ | **DONE** — Cancel button per order in Orders tab. Calls `useCancelOrder` → `DELETE /order/{id}` with L2 auth. Toast on success/failure. |
 | 6.4 | Error boundaries | Add `error.tsx` at app root and per-route. React Error Boundary wrapper component. User-friendly messages for common errors (network, auth, insufficient balance). |
 | 6.5 | Transaction confirmation UI | Show pending state while order submits. Animate transition: submitting → confirmed → filled. Auto-refresh positions after fill. |
 | 6.6 | Balance auto-refresh | Re-fetch USDC balance after trades, approvals, and on 30s interval. Show balance in trade panel and header. |

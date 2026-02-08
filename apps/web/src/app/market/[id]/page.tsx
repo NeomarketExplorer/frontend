@@ -316,7 +316,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         <div>
-          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} clobMarketLoaded={!clobMarketLoading && !!clobMarket} conditionId={market?.conditionId ?? null} />
+          <TradePanel outcomes={outcomes} tokenId={tokenId} mappedTokenIds={mappedTokenIds} negRisk={clobMarket?.neg_risk ?? false} clobMarketLoaded={!clobMarketLoading && !!clobMarket} acceptingOrders={clobMarket?.accepting_orders ?? true} conditionId={market?.conditionId ?? null} />
         </div>
       </div>
     </div>
@@ -329,6 +329,7 @@ function TradePanel({
   mappedTokenIds,
   negRisk,
   clobMarketLoaded,
+  acceptingOrders,
   conditionId,
 }: {
   outcomes: OutcomeEntry[];
@@ -336,6 +337,7 @@ function TradePanel({
   mappedTokenIds: string[];
   negRisk: boolean;
   clobMarketLoaded: boolean;
+  acceptingOrders: boolean;
   conditionId: string | null;
 }) {
   const privyAvailable = usePrivyAvailable();
@@ -361,6 +363,7 @@ function TradePanel({
       liveMidpoints={liveMidpoints}
       negRisk={negRisk}
       clobMarketLoaded={clobMarketLoaded}
+      acceptingOrders={acceptingOrders}
       conditionId={conditionId}
     />
   );
@@ -438,6 +441,7 @@ function TradePanelInner({
   liveMidpoints,
   negRisk,
   clobMarketLoaded,
+  acceptingOrders,
   conditionId,
 }: {
   outcomes: OutcomeEntry[];
@@ -446,6 +450,7 @@ function TradePanelInner({
   liveMidpoints: (number | null)[];
   negRisk: boolean;
   clobMarketLoaded: boolean;
+  acceptingOrders: boolean;
   conditionId: string | null;
 }) {
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
@@ -774,7 +779,16 @@ function TradePanelInner({
           </div>
         )}
 
-        {(needsApproval || needsCTFApproval) ? (
+        {!acceptingOrders ? (
+          <>
+            <Button className="w-full" size="lg" disabled>
+              Market Closed
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              This market is no longer accepting orders
+            </p>
+          </>
+        ) : (needsApproval || needsCTFApproval) ? (
           <Button
             className="w-full"
             size="lg"
@@ -813,7 +827,7 @@ function TradePanelInner({
           <p className="text-xs text-negative text-center">{enableError}</p>
         )}
 
-        {!isConnected && (
+        {!acceptingOrders ? null : !isConnected && (
           <p className="text-xs text-muted-foreground text-center">
             Connect your wallet to place orders
           </p>

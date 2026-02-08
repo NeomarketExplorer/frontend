@@ -26,8 +26,13 @@ export function useOrderbook(tokenId: string | null) {
     queryKey: orderbookKeys.token(tokenId ?? ''),
     queryFn: async () => {
       if (!tokenId) return null;
-      const orderbook = await clobClient.getOrderbook(tokenId);
-      return clobClient.parseOrderbook(orderbook);
+      try {
+        const orderbook = await clobClient.getOrderbook(tokenId);
+        return clobClient.parseOrderbook(orderbook);
+      } catch {
+        // CLOB returns error for closed/disabled orderbooks — treat as empty
+        return { bids: [], asks: [] };
+      }
     },
     enabled: !!tokenId,
     // Orderbook data is highly real-time, short stale time
@@ -42,7 +47,15 @@ export function useOrderbook(tokenId: string | null) {
 export function useMidpoint(tokenId: string | null) {
   return useQuery({
     queryKey: orderbookKeys.midpoint(tokenId ?? ''),
-    queryFn: () => (tokenId ? clobClient.getMidpoint(tokenId) : null),
+    queryFn: async () => {
+      if (!tokenId) return null;
+      try {
+        return await clobClient.getMidpoint(tokenId);
+      } catch {
+        // CLOB returns error for closed/disabled orderbooks
+        return null;
+      }
+    },
     enabled: !!tokenId,
     staleTime: 5 * 1000,
     refetchInterval: 10 * 1000,
