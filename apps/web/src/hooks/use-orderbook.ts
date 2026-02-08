@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { createClobClient } from '@app/api';
 
-const clobClient = createClobClient();
+const clobClient = createClobClient({ baseUrl: '/api/clob' });
 
 // Query keys
 export const orderbookKeys = {

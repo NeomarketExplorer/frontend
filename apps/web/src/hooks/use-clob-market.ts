@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { createClobClient } from '@app/api';
 
-const clobClient = createClobClient();
+const clobClient = createClobClient({ baseUrl: '/api/clob' });
 
 export function useClobMarket(conditionId: string | null) {
   return useQuery({
