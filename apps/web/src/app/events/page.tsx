@@ -5,6 +5,17 @@ import { EventSearch } from '@/components/event-search';
 export const metadata: Metadata = {
   title: 'Events',
   description: 'Browse prediction market events on Neomarket',
+  openGraph: {
+    title: 'Events',
+    description: 'Browse prediction market events on Neomarket',
+    type: 'website',
+    url: 'https://neomarket.bet/events',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Events | Neomarket',
+    description: 'Browse prediction market events on Neomarket',
+  },
 };
 
 export default async function EventsPage({

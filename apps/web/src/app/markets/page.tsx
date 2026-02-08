@@ -4,6 +4,17 @@ import { MarketsList } from '@/components/markets-list';
 export const metadata: Metadata = {
   title: 'Markets',
   description: 'Browse prediction markets on Neomarket',
+  openGraph: {
+    title: 'Markets',
+    description: 'Browse prediction markets on Neomarket',
+    type: 'website',
+    url: 'https://neomarket.bet/markets',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Markets | Neomarket',
+    description: 'Browse prediction markets on Neomarket',
+  },
 };
 
 export default function MarketsPage() {

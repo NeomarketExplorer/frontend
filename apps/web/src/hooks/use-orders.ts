@@ -196,8 +196,9 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       return result.orderID || result.orderId;
     },
     onSuccess: (orderId, params) => {
-      // Immediate: invalidate open orders list and balance/allowance
+      // Immediate: invalidate open orders list, balance/allowance, and positions
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['positions'] });
 
       if (address) {
         // Immediately invalidate balance so TanStack Query refetches

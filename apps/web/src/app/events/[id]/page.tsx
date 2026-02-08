@@ -14,17 +14,28 @@ export async function generateMetadata({
   const { id } = await params;
   try {
     const event = await getEvent(id);
+    const description = event.description
+      ? event.description.length > 160
+        ? event.description.slice(0, 157) + '...'
+        : event.description
+      : `Trade on ${event.title} at Neomarket`;
     return {
       title: event.title,
-      description:
-        event.description || `Trade on ${event.title} at Neomarket`,
+      description,
       openGraph: {
         title: event.title,
-        description:
-          event.description || `Trade on ${event.title} at Neomarket`,
+        description,
+        type: 'article',
+        url: `https://neomarket.bet/events/${id}`,
         ...(event.image && {
           images: [{ url: event.image, width: 1200, height: 630 }],
         }),
+      },
+      twitter: {
+        card: event.image ? 'summary_large_image' : 'summary',
+        title: event.title,
+        description,
+        ...(event.image && { images: [event.image] }),
       },
     };
   } catch {

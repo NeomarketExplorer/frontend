@@ -12,18 +12,30 @@ export async function generateMetadata({
     const yesPrice = market.outcomePrices?.[0];
     const priceStr =
       yesPrice != null ? ` — YES ${(yesPrice * 100).toFixed(0)}c` : '';
+    const rawDescription =
+      market.description ||
+      `${market.question}${priceStr}. Trade on Neomarket.`;
+    const description =
+      rawDescription.length > 160
+        ? rawDescription.slice(0, 157) + '...'
+        : rawDescription;
     return {
       title: market.question,
-      description:
-        market.description ||
-        `${market.question}${priceStr}. Trade on Neomarket.`,
+      description,
       openGraph: {
         title: `${market.question}${priceStr}`,
-        description:
-          market.description || `Trade this market on Neomarket`,
+        description,
+        type: 'article',
+        url: `https://neomarket.bet/market/${id}`,
         ...(market.image && {
           images: [{ url: market.image, width: 1200, height: 630 }],
         }),
+      },
+      twitter: {
+        card: market.image ? 'summary_large_image' : 'summary',
+        title: `${market.question}${priceStr}`,
+        description,
+        ...(market.image && { images: [market.image] }),
       },
     };
   } catch {

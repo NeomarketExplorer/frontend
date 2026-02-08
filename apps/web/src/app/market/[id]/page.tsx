@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { PriceChart } from '@/components/price-chart';
 import {
   Button,
@@ -458,6 +458,20 @@ function TradePanelInner({
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  const [lastOrderResult, setLastOrderResult] = useState<{
+    orderId: string;
+    side: string;
+    size: string;
+  } | null>(null);
+  const lastOrderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear the success banner after 5 seconds
+  useEffect(() => {
+    return () => {
+      if (lastOrderTimerRef.current) clearTimeout(lastOrderTimerRef.current);
+    };
+  }, []);
+
   const {
     balance,
     ctfAllowance,
@@ -517,6 +531,19 @@ function TradePanelInner({
     onSuccess: (orderId) => {
       setOrderStatus(null);
       toast({ variant: 'success', title: 'Order placed', description: `Order ID: ${orderId}` });
+
+      // Show success banner in the trade panel
+      setLastOrderResult({
+        orderId,
+        side: orderForm.side,
+        size: orderForm.size,
+      });
+      // Clear any existing timer
+      if (lastOrderTimerRef.current) clearTimeout(lastOrderTimerRef.current);
+      lastOrderTimerRef.current = setTimeout(() => {
+        setLastOrderResult(null);
+        lastOrderTimerRef.current = null;
+      }, 5000);
     },
     onError: (error) => {
       setOrderStatus(null);
@@ -829,6 +856,26 @@ function TradePanelInner({
 
         {enableError && (
           <p className="text-xs text-negative text-center">{enableError}</p>
+        )}
+
+        {lastOrderResult && (
+          <div className="flex items-center gap-2 rounded-md bg-positive/10 border border-positive/20 px-3 py-2 text-sm text-positive font-mono animate-in fade-in slide-in-from-top-1 duration-200">
+            <svg
+              className="h-4 w-4 flex-shrink-0"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="8" cy="8" r="7" />
+              <path d="M5 8.5l2 2 4-4" />
+            </svg>
+            <span>
+              Order placed: {lastOrderResult.side} {lastOrderResult.size} shares
+            </span>
+          </div>
         )}
 
         {!acceptingOrders ? null : !isConnected && (
