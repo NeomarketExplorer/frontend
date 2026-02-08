@@ -122,9 +122,9 @@ export default function MarketPage({ params }: MarketPageProps) {
         <div className="animate-pulse">
           <div className="h-8 w-1/2 bg-muted rounded mb-4" />
           <div className="h-4 w-3/4 bg-muted rounded mb-8" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-96 bg-muted rounded" />
-            <div className="h-96 bg-muted rounded" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="lg:col-span-2 h-64 sm:h-96 bg-muted rounded" />
+            <div className="h-64 sm:h-96 bg-muted rounded" />
           </div>
         </div>
       </div>
@@ -142,13 +142,13 @@ export default function MarketPage({ params }: MarketPageProps) {
 
   return (
     <div>
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-3 sm:gap-4 mb-4 sm:mb-6">
         {market.image && (
-          <img src={market.image} alt="" className="w-16 h-16 rounded-lg object-cover" />
+          <img src={market.image} alt="" className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0" />
         )}
-        <div className="flex-1">
-          <h1 className="text-xl font-bold mb-2">{market.question}</h1>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">{market.question}</h1>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground">
             {market.category && <Badge variant="outline">{market.category}</Badge>}
             <span>{formatVolume(market.volume)} volume</span>
             {market.endDateIso && <span>Ends {new Date(market.endDateIso).toLocaleDateString()}</span>}
@@ -156,17 +156,17 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
           <div className="space-y-2">
-            <div className="flex items-center justify-end gap-1">
+            <div className="flex items-center justify-end gap-1 overflow-x-auto">
               {(['1h', '6h', '1d', '1w', 'max'] as const).map((interval) => (
                 <Button
                   key={interval}
                   variant={chartInterval === interval ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setChartInterval(interval)}
-                  className="text-xs px-2 h-7"
+                  className="text-xs px-2 h-8 min-h-[32px] min-w-[40px] flex-shrink-0"
                 >
                   {interval.toUpperCase()}
                 </Button>
@@ -176,7 +176,7 @@ export default function MarketPage({ params }: MarketPageProps) {
               data={priceHistory ?? []}
               isLoading={priceHistoryLoading}
               title={outcomes[orderForm.outcomeIndex]?.label ?? 'Price'}
-              height={280}
+              height={220}
             />
           </div>
 
@@ -267,46 +267,48 @@ export default function MarketPage({ params }: MarketPageProps) {
                       No open orders
                     </div>
                   ) : (
-                    <div className="space-y-1 text-sm font-mono">
-                      <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground border-b border-border/50 mb-1">
-                        <span className="w-14">Side</span>
-                        <span className="flex-1">Price</span>
-                        <span className="flex-1">Size</span>
-                        <span className="flex-1">Filled</span>
-                        <span className="flex-1">Time</span>
-                        <span className="w-16"></span>
-                      </div>
-                      {openOrders.map((order: { id: string; side: string; price: string; original_size: string; size_matched: string; created_at: number }) => (
-                        <div key={order.id} className="flex items-center gap-3 py-1.5">
-                          <Badge
-                            variant={order.side === 'BUY' ? 'positive' : 'negative'}
-                            className="w-14 justify-center text-xs"
-                          >
-                            {order.side}
-                          </Badge>
-                          <span className="flex-1">
-                            {(parseFloat(order.price) * 100).toFixed(0)}c
-                          </span>
-                          <span className="flex-1">
-                            {parseFloat(order.original_size).toFixed(2)}
-                          </span>
-                          <span className="flex-1 text-muted-foreground">
-                            {parseFloat(order.size_matched).toFixed(2)}
-                          </span>
-                          <span className="flex-1 text-muted-foreground text-xs">
-                            {new Date(order.created_at * 1000).toLocaleString()}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-16 h-7 text-xs text-negative hover:text-negative"
-                            disabled={cancelOrder.isPending}
-                            onClick={() => cancelOrder.mutate(order.id)}
-                          >
-                            Cancel
-                          </Button>
+                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                      <div className="space-y-1 text-sm font-mono min-w-[480px]">
+                        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground border-b border-border/50 mb-1">
+                          <span className="w-14">Side</span>
+                          <span className="flex-1">Price</span>
+                          <span className="flex-1">Size</span>
+                          <span className="flex-1">Filled</span>
+                          <span className="flex-1">Time</span>
+                          <span className="w-16"></span>
                         </div>
-                      ))}
+                        {openOrders.map((order: { id: string; side: string; price: string; original_size: string; size_matched: string; created_at: number }) => (
+                          <div key={order.id} className="flex items-center gap-3 py-1.5">
+                            <Badge
+                              variant={order.side === 'BUY' ? 'positive' : 'negative'}
+                              className="w-14 justify-center text-xs"
+                            >
+                              {order.side}
+                            </Badge>
+                            <span className="flex-1">
+                              {(parseFloat(order.price) * 100).toFixed(0)}c
+                            </span>
+                            <span className="flex-1">
+                              {parseFloat(order.original_size).toFixed(2)}
+                            </span>
+                            <span className="flex-1 text-muted-foreground">
+                              {parseFloat(order.size_matched).toFixed(2)}
+                            </span>
+                            <span className="flex-1 text-muted-foreground text-xs">
+                              {new Date(order.created_at * 1000).toLocaleString()}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-16 h-8 min-h-[32px] text-xs text-negative hover:text-negative"
+                              disabled={cancelOrder.isPending}
+                              onClick={() => cancelOrder.mutate(order.id)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </TabsContent>
@@ -379,7 +381,7 @@ function TradePanelDisabled({
   const { orderForm } = useTradingStore();
 
   return (
-    <Card className="sticky top-20">
+    <Card className="sticky top-[6.5rem] sm:top-20">
       <CardHeader>
         <CardTitle className="text-base">Trade</CardTitle>
       </CardHeader>
@@ -402,7 +404,7 @@ function TradePanelDisabled({
               <Button
                 key={outcome.key}
                 variant={variant}
-                className="w-full"
+                className="w-full min-h-[44px]"
                 onClick={() => useTradingStore.getState().setOrderOutcome(i)}
               >
                 {outcome.label}
@@ -559,7 +561,7 @@ function TradePanelInner({
   };
 
   return (
-    <Card className="sticky top-20">
+    <Card className="sticky top-[6.5rem] sm:top-20">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Trade</CardTitle>
@@ -580,7 +582,7 @@ function TradePanelInner({
         {/* Limit / Market toggle */}
         <div className="grid grid-cols-2 gap-1 p-0.5 bg-muted/50 rounded-md">
           <button
-            className={`text-xs font-mono py-1.5 rounded transition-colors ${
+            className={`text-xs font-mono py-2.5 sm:py-1.5 rounded transition-colors min-h-[44px] sm:min-h-0 ${
               isMarket
                 ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
                 : 'text-muted-foreground hover:text-[var(--foreground)]'
@@ -590,7 +592,7 @@ function TradePanelInner({
             Market
           </button>
           <button
-            className={`text-xs font-mono py-1.5 rounded transition-colors ${
+            className={`text-xs font-mono py-2.5 sm:py-1.5 rounded transition-colors min-h-[44px] sm:min-h-0 ${
               !isMarket
                 ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
                 : 'text-muted-foreground hover:text-[var(--foreground)]'
@@ -619,7 +621,7 @@ function TradePanelInner({
               <Button
                 key={outcome.key}
                 variant={variant}
-                className="w-full"
+                className="w-full min-h-[44px]"
                 onClick={() => useTradingStore.getState().setOrderOutcome(i)}
               >
                 {outcome.label}
@@ -635,12 +637,14 @@ function TradePanelInner({
           <Button
             variant={orderForm.side === 'BUY' ? 'positive' : 'outline'}
             onClick={() => setOrderSide('BUY')}
+            className="min-h-[44px]"
           >
             Buy
           </Button>
           <Button
             variant={orderForm.side === 'SELL' ? 'negative' : 'outline'}
             onClick={() => setOrderSide('SELL')}
+            className="min-h-[44px]"
           >
             Sell
           </Button>
@@ -781,7 +785,7 @@ function TradePanelInner({
 
         {!acceptingOrders ? (
           <>
-            <Button className="w-full" size="lg" disabled>
+            <Button className="w-full min-h-[48px]" size="lg" disabled>
               Market Closed
             </Button>
             <p className="text-xs text-muted-foreground text-center">
@@ -790,7 +794,7 @@ function TradePanelInner({
           </>
         ) : (needsApproval || needsCTFApproval) ? (
           <Button
-            className="w-full"
+            className="w-full min-h-[48px]"
             size="lg"
             disabled={isEnabling}
             onClick={async () => {
@@ -802,7 +806,7 @@ function TradePanelInner({
           </Button>
         ) : (
           <Button
-            className="w-full"
+            className="w-full min-h-[48px]"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
             disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || noLiquidity || (!isMarket && !price)}

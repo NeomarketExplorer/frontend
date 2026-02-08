@@ -145,6 +145,8 @@ export function useConditionalTokenApproval(negRisk = false): UseConditionalToke
 
       // Refresh the approval check after all TXs are confirmed
       await queryClient.invalidateQueries({ queryKey: ['ctf-approval', address] });
+      // Also refresh balance/allowance so the trade panel UI updates immediately
+      await queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
 
       return lastHash;
     } catch (err) {

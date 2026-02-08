@@ -120,7 +120,7 @@ export default function RootLayout({
 
               {/* Mobile Nav */}
               <div className="sm:hidden sticky top-14 z-40 backdrop-blur-xl bg-[var(--background)]/90 border-b border-[var(--card-border)]">
-                <div className="flex items-center justify-center gap-1 px-4 py-2 overflow-x-auto">
+                <div className="flex items-center justify-center gap-1 px-4 py-1.5 overflow-x-auto">
                   <NavLink href="/events" label="Events" />
                   <NavLink href="/markets" label="Markets" />
                   <NavLink href="/portfolio" label="Portfolio" />

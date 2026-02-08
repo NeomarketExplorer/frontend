@@ -354,7 +354,6 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 
 - Transaction status/confirmation UI (pending → confirmed → filled)
 - No Gnosis Safe deployment for gasless trading
-- Root metadata says "PolyExplorer" instead of "Neomarket"
 - No error boundaries or error.tsx pages
 
 ---
@@ -385,7 +384,6 @@ This is the critical path. Nothing else matters if users can't trade.
 **Env vars already set in Coolify:** `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
 
 **Known issues in current code to fix:**
-- Root metadata still says "PolyExplorer".
 - No error boundaries or error.tsx pages.
 
 ---
@@ -425,7 +423,7 @@ This is the critical path. Nothing else matters if users can't trade.
 
 | # | Task | Details |
 |---|------|---------|
-| 8.1 | Rebrand to Neomarket | Replace all "PolyExplorer" references in metadata, titles, components. Update favicon, OG image. |
+| 8.1 | ~~Rebrand to Neomarket~~ | **DONE** — All metadata, titles, components use "Neomarket". OG tags set. |
 | 8.2 | Dynamic page metadata | `generateMetadata()` in each page route. Market pages show market question as title. Event pages show event name. |
 | 8.3 | Open Graph + Twitter Cards | OG image, title, description per page. Twitter card meta tags. Use market images for social previews. |
 | 8.4 | Sitemap + robots.txt | Dynamic `sitemap.ts` generating URLs from indexer events/markets. `robots.ts` allowing crawlers. |

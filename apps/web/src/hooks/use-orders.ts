@@ -196,10 +196,14 @@ export function usePlaceOrder(options?: UseOrderOptions) {
       return result.orderID || result.orderId;
     },
     onSuccess: (orderId, params) => {
-      // Immediate: invalidate open orders list
+      // Immediate: invalidate open orders list and balance/allowance
       queryClient.invalidateQueries({ queryKey: ['orders'] });
 
       if (address) {
+        // Immediately invalidate balance so TanStack Query refetches
+        // (the polling below will correct with on-chain data once settled)
+        queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+
         // 1. Optimistic UI update — show expected balance instantly
         const currentUsdc = useWalletStore.getState().usdcBalance;
         const orderCost = (params.price / 100) * params.size;
@@ -327,6 +331,11 @@ export function useCancelOrder(options?: UseOrderOptions) {
     },
     onSuccess: (orderId) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Cancelling an order may unfreeze collateral — refresh balance
+      const addr = useWalletStore.getState().address;
+      if (addr) {
+        queryClient.invalidateQueries({ queryKey: ['usdc-balance', addr] });
+      }
       options?.onSuccess?.(orderId);
     },
     onError: (error: Error) => {

@@ -872,3 +872,38 @@ a {
   content-visibility: auto;
   contain-intrinsic-size: 0 72px;
 }
+
+/* ========================================================================== */
+/* Mobile optimizations */
+/* ========================================================================== */
+
+/* Prevent horizontal overflow on the html/body level */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure all inputs have touch-friendly minimum height on mobile */
+@media (max-width: 640px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  input[type="email"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+
+  /* Ensure buttons have touch-friendly tap targets */
+  .btn,
+  button[class*="btn"] {
+    min-height: 44px;
+  }
+}
+
+/* Smooth mobile scroll for overflow containers */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}

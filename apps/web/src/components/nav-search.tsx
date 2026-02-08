@@ -12,9 +12,12 @@ export function NavSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mobileContainerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -81,27 +84,60 @@ export function NavSearch() {
     }
   }, [selectedIndex]);
 
-  const navigateToEvent = (event: IndexerEvent) => {
+  // Focus mobile input when overlay opens
+  useEffect(() => {
+    if (mobileOpen) {
+      // Small delay to allow the overlay to render
+      setTimeout(() => mobileInputRef.current?.focus(), 100);
+    }
+  }, [mobileOpen]);
+
+  // Cmd+K / Ctrl+K global shortcut
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        // On mobile-sized screens, open the overlay
+        if (window.innerWidth < 768) {
+          setMobileOpen(true);
+        } else {
+          inputRef.current?.focus();
+        }
+      }
+    }
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const clearAndClose = () => {
     setQuery('');
     setIsOpen(false);
     setResults([]);
     setMarketResults([]);
+    setMobileOpen(false);
+  };
+
+  const navigateToEvent = (event: IndexerEvent) => {
+    clearAndClose();
     router.push(`/events/${event.id}`);
   };
 
   const navigateToMarket = (market: IndexerMarket) => {
-    setQuery('');
-    setIsOpen(false);
-    setResults([]);
-    setMarketResults([]);
+    clearAndClose();
     router.push(`/market/${market.id}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && mobileOpen) {
+      clearAndClose();
+      return;
+    }
+
     if (!isOpen || totalResults === 0) {
       if (e.key === 'Enter' && query.trim()) {
         e.preventDefault();
         router.push(`/events?search=${encodeURIComponent(query)}`);
+        clearAndClose();
       }
       return;
     }
@@ -128,7 +164,7 @@ export function NavSearch() {
           }
         } else if (query.trim()) {
           router.push(`/events?search=${encodeURIComponent(query)}`);
-          setIsOpen(false);
+          clearAndClose();
         }
         break;
       case 'Escape':
@@ -138,59 +174,12 @@ export function NavSearch() {
     }
   };
 
-  return (
-    <div ref={containerRef} className="relative hidden md:block">
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-          {isLoading ? (
-            <div className="w-3.5 h-3.5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-3.5 h-3.5 text-[var(--foreground-muted)]"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          )}
-        </div>
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (results.length > 0 || marketResults.length > 0) setIsOpen(true);
-          }}
-          placeholder="Search markets..."
-          className="w-56 pl-8 pr-3 py-1.5 bg-[var(--card)] border border-[var(--card-border)] font-mono text-xs text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all"
-        />
-        {query && (
-          <button
-            onClick={() => {
-              setQuery('');
-              setResults([]);
-              setMarketResults([]);
-              setIsOpen(false);
-              inputRef.current?.focus();
-            }}
-            className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors"
-          >
-            <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        )}
-      </div>
-
+  // Shared results dropdown content
+  const renderResults = () => (
+    <>
       {isOpen && totalResults > 0 && (
-        <div className="absolute right-0 z-50 w-[420px] mt-2 bg-[var(--card-solid)] border border-[var(--card-border)] shadow-2xl overflow-hidden">
-          <div ref={resultsRef} className="max-h-[360px] overflow-y-auto">
+        <div className="md:absolute md:right-0 z-50 md:w-[420px] md:mt-2 bg-[var(--card-solid)] md:border md:border-[var(--card-border)] md:shadow-2xl overflow-hidden">
+          <div ref={resultsRef} className="max-h-[60vh] md:max-h-[360px] overflow-y-auto">
             {results.length > 0 && (
               <>
                 <div className="px-2.5 py-1.5 text-[0.6rem] font-mono text-[var(--foreground-muted)] uppercase tracking-widest bg-[var(--background)]">
@@ -203,7 +192,7 @@ export function NavSearch() {
                       data-result-item
                       onClick={() => navigateToEvent(event)}
                       onMouseEnter={() => setSelectedIndex(index)}
-                      className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors ${
+                      className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors min-h-[44px] ${
                         index === selectedIndex ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--card)]'
                       }`}
                     >
@@ -265,7 +254,7 @@ export function NavSearch() {
                         data-result-item
                         onClick={() => navigateToMarket(market)}
                         onMouseEnter={() => setSelectedIndex(flatIndex)}
-                        className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors ${
+                        className={`w-full p-2.5 flex items-start gap-2.5 text-left transition-colors min-h-[44px] ${
                           flatIndex === selectedIndex ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--card)]'
                         }`}
                       >
@@ -321,9 +310,9 @@ export function NavSearch() {
               <button
                 onClick={() => {
                   router.push(`/events?search=${encodeURIComponent(query)}`);
-                  setIsOpen(false);
+                  clearAndClose();
                 }}
-                className="w-full py-1.5 px-2 text-center font-mono text-[0.65rem] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
+                className="w-full py-2 px-2 text-center font-mono text-[0.65rem] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors min-h-[44px]"
               >
                 View all results for &ldquo;{query}&rdquo; &rarr;
               </button>
@@ -333,10 +322,140 @@ export function NavSearch() {
       )}
 
       {isOpen && query && totalResults === 0 && !isLoading && (
-        <div className="absolute right-0 z-50 w-[300px] mt-2 bg-[var(--card-solid)] border border-[var(--card-border)] shadow-xl p-4 text-center">
+        <div className="md:absolute md:right-0 z-50 md:w-[300px] md:mt-2 bg-[var(--card-solid)] md:border md:border-[var(--card-border)] md:shadow-xl p-4 text-center">
           <p className="font-mono text-xs text-[var(--foreground-muted)]">No results found for &ldquo;{query}&rdquo;</p>
         </div>
       )}
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile: search icon button */}
+      <button
+        className="md:hidden flex items-center justify-center w-9 h-9 bg-[var(--card)] border border-[var(--card-border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition-colors"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Search"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          className="w-4 h-4"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      </button>
+
+      {/* Mobile: full-screen search overlay */}
+      {mobileOpen && (
+        <div
+          ref={mobileContainerRef}
+          className="md:hidden fixed inset-0 z-[100] bg-[var(--background)] flex flex-col"
+        >
+          {/* Overlay header with input */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--card-border)]">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="w-4 h-4 text-[var(--foreground-muted)]"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                )}
+              </div>
+              <input
+                ref={mobileInputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search markets & events..."
+                className="w-full pl-10 pr-3 py-2.5 bg-[var(--card)] border border-[var(--card-border)] font-mono text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all min-h-[44px]"
+                autoComplete="off"
+              />
+            </div>
+            <button
+              onClick={clearAndClose}
+              className="flex items-center justify-center w-10 h-10 text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors"
+              aria-label="Close search"
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Results */}
+          <div className="flex-1 overflow-y-auto">
+            {renderResults()}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop: inline search with dropdown */}
+      <div ref={containerRef} className="relative hidden md:block">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+            {isLoading ? (
+              <div className="w-3.5 h-3.5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="w-3.5 h-3.5 text-[var(--foreground-muted)]"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            )}
+          </div>
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {
+              if (results.length > 0 || marketResults.length > 0) setIsOpen(true);
+            }}
+            placeholder="Search...  Cmd+K"
+            className="w-56 pl-8 pr-3 py-1.5 bg-[var(--card)] border border-[var(--card-border)] font-mono text-xs text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all"
+          />
+          {query && (
+            <button
+              onClick={() => {
+                setQuery('');
+                setResults([]);
+                setMarketResults([]);
+                setIsOpen(false);
+                inputRef.current?.focus();
+              }}
+              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {renderResults()}
+      </div>
+    </>
   );
 }

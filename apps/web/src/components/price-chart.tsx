@@ -134,14 +134,14 @@ export function PriceChart({
   return (
     <Card className={cn(className)}>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <CardTitle className="text-base">{title}</CardTitle>
           {currentPrice !== null && (
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold">{currentPrice.toFixed(1)}¢</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-xl sm:text-2xl font-bold">{currentPrice.toFixed(1)}¢</span>
               {priceChange && (
                 <span className={cn(
-                  'text-sm font-medium',
+                  'text-xs sm:text-sm font-medium',
                   priceChange.isPositive ? 'text-positive' : 'text-negative'
                 )}>
                   {priceChange.isPositive ? '+' : ''}{priceChange.absolute.toFixed(1)}¢
