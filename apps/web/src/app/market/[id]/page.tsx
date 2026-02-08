@@ -14,6 +14,7 @@ import {
   TabsContent,
   Badge,
   Input,
+  Skeleton,
   toast,
 } from '@app/ui';
 import {
@@ -43,6 +44,123 @@ type TimeInterval = '1h' | '6h' | '1d' | '1w' | 'max';
 
 interface MarketPageProps {
   params: Promise<{ id: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Orderbook flash detection: compare current vs previous levels, emit flash map
+// ---------------------------------------------------------------------------
+
+type FlashType = 'positive' | 'negative' | 'accent';
+
+interface OrderbookLevel {
+  price: number;
+  size: number;
+}
+
+interface OrderbookSnapshot {
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+}
+
+/**
+ * Builds a Map<"bid:idx"|"ask:idx", FlashType> by diffing against the
+ * previous orderbook snapshot stored in a ref.
+ */
+function useOrderbookFlash(orderbook: OrderbookSnapshot | null | undefined) {
+  const prevRef = useRef<OrderbookSnapshot | null>(null);
+  const flashCounterRef = useRef(0);
+
+  const { flashMap, flashId } = useMemo(() => {
+    const map = new Map<string, FlashType>();
+    if (!orderbook) {
+      return { flashMap: map, flashId: flashCounterRef.current };
+    }
+
+    const prev = prevRef.current;
+
+    if (prev) {
+      // Compare bids
+      const prevBids = prev.bids.slice(0, 8);
+      const curBids = orderbook.bids.slice(0, 8);
+      for (let i = 0; i < curBids.length; i++) {
+        const cur = curBids[i];
+        const old = prevBids[i];
+        if (!old) {
+          // New level appeared
+          map.set(`bid:${i}`, 'accent');
+        } else if (cur.price !== old.price || cur.size !== old.size) {
+          map.set(`bid:${i}`, cur.price > old.price ? 'positive' : cur.price < old.price ? 'negative' : 'positive');
+        }
+      }
+
+      // Compare asks
+      const prevAsks = prev.asks.slice(0, 8);
+      const curAsks = orderbook.asks.slice(0, 8);
+      for (let i = 0; i < curAsks.length; i++) {
+        const cur = curAsks[i];
+        const old = prevAsks[i];
+        if (!old) {
+          map.set(`ask:${i}`, 'accent');
+        } else if (cur.price !== old.price || cur.size !== old.size) {
+          map.set(`ask:${i}`, cur.price < old.price ? 'positive' : cur.price > old.price ? 'negative' : 'negative');
+        }
+      }
+    }
+
+    // Increment counter so keys change, re-triggering CSS animation
+    if (map.size > 0) {
+      flashCounterRef.current += 1;
+    }
+
+    return { flashMap: map, flashId: flashCounterRef.current };
+  }, [orderbook]);
+
+  // Update the ref *after* the render uses the diff
+  useEffect(() => {
+    if (orderbook) {
+      prevRef.current = {
+        bids: orderbook.bids.slice(0, 8).map((l) => ({ ...l })),
+        asks: orderbook.asks.slice(0, 8).map((l) => ({ ...l })),
+      };
+    }
+  }, [orderbook]);
+
+  return { flashMap, flashId };
+}
+
+/**
+ * Tracks the previous midpoint value and returns a flash direction.
+ */
+function useMidpointFlash(midpointA: number | null | undefined, midpointB: number | null | undefined) {
+  const prevARef = useRef<number | null>(null);
+  const prevBRef = useRef<number | null>(null);
+  const counterRef = useRef(0);
+
+  const { flashA, flashB, flashMidId } = useMemo(() => {
+    let fA: FlashType | null = null;
+    let fB: FlashType | null = null;
+    let changed = false;
+
+    if (midpointA != null && prevARef.current != null && midpointA !== prevARef.current) {
+      fA = midpointA > prevARef.current ? 'positive' : 'negative';
+      changed = true;
+    }
+    if (midpointB != null && prevBRef.current != null && midpointB !== prevBRef.current) {
+      fB = midpointB > prevBRef.current ? 'positive' : 'negative';
+      changed = true;
+    }
+
+    if (changed) counterRef.current += 1;
+
+    return { flashA: fA, flashB: fB, flashMidId: counterRef.current };
+  }, [midpointA, midpointB]);
+
+  useEffect(() => {
+    if (midpointA != null) prevARef.current = midpointA;
+    if (midpointB != null) prevBRef.current = midpointB;
+  }, [midpointA, midpointB]);
+
+  return { flashA, flashB, flashMidId };
 }
 
 export default function MarketPage({ params }: MarketPageProps) {
@@ -106,6 +224,10 @@ export default function MarketPage({ params }: MarketPageProps) {
 
   useRealtimeOrderbook(tokenId);
 
+  // Flash detection for orderbook levels and midpoint
+  const { flashMap, flashId } = useOrderbookFlash(orderbook);
+  const { flashA: midFlashA, flashMidId } = useMidpointFlash(midpointA, midpointB);
+
   const { data: openOrders, isLoading: ordersLoading } = useOpenOrders();
   const cancelOrder = useCancelOrder({
     onSuccess: (orderId) => {
@@ -119,12 +241,103 @@ export default function MarketPage({ params }: MarketPageProps) {
   if (marketLoading) {
     return (
       <div>
-        <div className="animate-pulse">
-          <div className="h-8 w-1/2 bg-muted rounded mb-4" />
-          <div className="h-4 w-3/4 bg-muted rounded mb-8" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            <div className="lg:col-span-2 h-64 sm:h-96 bg-muted rounded" />
-            <div className="h-64 sm:h-96 bg-muted rounded" />
+        <span className="sr-only">Loading market data...</span>
+        {/* Title area skeleton */}
+        <div className="flex gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <Skeleton className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg flex-shrink-0" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <Skeleton className="h-6 w-3/4" />
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Chart + tabs column */}
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-end gap-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-10" />
+                ))}
+              </div>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-16" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-7 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[220px] w-full rounded-lg" />
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 w-24 rounded-md" />
+                  <Skeleton className="h-9 w-20 rounded-md" />
+                  <Skeleton className="h-9 w-20 rounded-md" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <OrderbookSkeleton />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Trade panel sidebar skeleton */}
+          <div>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-5 w-12" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-1 p-0.5 bg-muted/50 rounded-md">
+                  <Skeleton className="h-9 rounded" />
+                  <Skeleton className="h-9 rounded" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Skeleton className="h-11 rounded-md" />
+                  <Skeleton className="h-11 rounded-md" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Skeleton className="h-11 rounded-md" />
+                  <Skeleton className="h-11 rounded-md" />
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-14" />
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-14" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-14" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-14" />
+                  </div>
+                </div>
+                <Skeleton className="h-12 w-full rounded-md" />
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -192,9 +405,7 @@ export default function MarketPage({ params }: MarketPageProps) {
               <CardContent>
                 <TabsContent value="orderbook" className="mt-0">
                   {orderbookLoading ? (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground">
-                      Loading orderbook...
-                    </div>
+                    <OrderbookSkeleton />
                   ) : orderbookError ? (
                     <div className="h-48 flex items-center justify-center text-muted-foreground">
                       Failed to load orderbook
@@ -204,37 +415,61 @@ export default function MarketPage({ params }: MarketPageProps) {
                       No orderbook data
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-positive mb-2">Bids</div>
-                        <div className="space-y-1 text-sm font-mono">
-                          {orderbook?.bids.slice(0, 8).map((level, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span className="text-positive">{level.price.toFixed(2)}</span>
-                              <span className="text-muted-foreground">{level.size.toFixed(0)}</span>
-                            </div>
-                          ))}
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-positive mb-2">Bids</div>
+                          <div className="space-y-1 text-sm font-mono">
+                            {orderbook?.bids.slice(0, 8).map((level, i) => {
+                              const flash = flashMap.get(`bid:${i}`);
+                              return (
+                                <div
+                                  key={`bid-${i}-${flash ? flashId : 'stable'}`}
+                                  className={`flex justify-between rounded-sm px-1 -mx-1 ${flash ? `flash-${flash}` : ''}`}
+                                >
+                                  <span className="text-positive">{level.price.toFixed(2)}</span>
+                                  <span className="text-muted-foreground">{level.size.toFixed(0)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-negative mb-2">Asks</div>
+                          <div className="space-y-1 text-sm font-mono">
+                            {orderbook?.asks.slice(0, 8).map((level, i) => {
+                              const flash = flashMap.get(`ask:${i}`);
+                              return (
+                                <div
+                                  key={`ask-${i}-${flash ? flashId : 'stable'}`}
+                                  className={`flex justify-between rounded-sm px-1 -mx-1 ${flash ? `flash-${flash}` : ''}`}
+                                >
+                                  <span className="text-negative">{level.price.toFixed(2)}</span>
+                                  <span className="text-muted-foreground">{level.size.toFixed(0)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-negative mb-2">Asks</div>
-                        <div className="space-y-1 text-sm font-mono">
-                          {orderbook?.asks.slice(0, 8).map((level, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span className="text-negative">{level.price.toFixed(2)}</span>
-                              <span className="text-muted-foreground">{level.size.toFixed(0)}</span>
-                            </div>
-                          ))}
+                      {/* Midpoint display with flash */}
+                      {midpointA != null && (
+                        <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-center gap-4 text-sm font-mono">
+                          <span className="text-muted-foreground text-xs">MID</span>
+                          <span
+                            key={`midA-${midFlashA ? flashMidId : 'stable'}`}
+                            className={midFlashA ? `flash-text-${midFlashA}` : ''}
+                          >
+                            {(midpointA * 100).toFixed(1)}c
+                          </span>
                         </div>
-                      </div>
-                    </div>
+                      )}
+                    </>
                   )}
                 </TabsContent>
                 <TabsContent value="trades" className="mt-0">
                   {tradesLoading ? (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground">
-                      Loading trades...
-                    </div>
+                    <TradesSkeleton />
                   ) : tradesError ? (
                     <div className="h-48 flex items-center justify-center text-muted-foreground">
                       Failed to load trades
@@ -259,9 +494,7 @@ export default function MarketPage({ params }: MarketPageProps) {
                 </TabsContent>
                 <TabsContent value="orders" className="mt-0">
                   {ordersLoading ? (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground">
-                      Loading orders...
-                    </div>
+                    <OrdersSkeleton />
                   ) : !openOrders || openOrders.length === 0 ? (
                     <div className="h-48 flex items-center justify-center text-muted-foreground">
                       No open orders
@@ -885,5 +1118,93 @@ function TradePanelInner({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton components for loading states
+// ---------------------------------------------------------------------------
+
+function OrderbookSkeleton() {
+  const widths = ['w-full', 'w-11/12', 'w-10/12', 'w-9/12', 'w-8/12', 'w-7/12', 'w-6/12', 'w-5/12'];
+  return (
+    <div>
+      <span className="sr-only">Loading orderbook...</span>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="flex justify-between mb-2">
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-4 w-10" />
+          </div>
+          <div className="space-y-1.5">
+            {widths.map((w, i) => (
+              <div key={i} className="flex justify-between gap-2">
+                <Skeleton className="h-5 w-14" />
+                <Skeleton className={`h-5 ${w}`} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between mb-2">
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-4 w-10" />
+          </div>
+          <div className="space-y-1.5">
+            {widths.map((w, i) => (
+              <div key={i} className="flex justify-between gap-2">
+                <Skeleton className="h-5 w-14" />
+                <Skeleton className={`h-5 ${w}`} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradesSkeleton() {
+  return (
+    <div>
+      <span className="sr-only">Loading trades...</span>
+      <div className="space-y-1.5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex justify-between items-center py-1">
+            <Skeleton className="h-5 w-12 rounded-full" />
+            <Skeleton className="h-5 w-14" />
+            <Skeleton className="h-5 w-10" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OrdersSkeleton() {
+  return (
+    <div>
+      <span className="sr-only">Loading orders...</span>
+      <div className="space-y-1 min-w-[480px]">
+        <div className="flex items-center gap-3 py-1 border-b border-border/50 mb-1">
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 py-1.5">
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-5 flex-1" />
+            <Skeleton className="h-8 w-16 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

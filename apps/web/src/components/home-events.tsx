@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Skeleton } from '@app/ui';
 import { formatVolume, getEvents, type IndexerEvent } from '@/lib/indexer';
 
 type SortField = 'volume_24hr' | 'volume' | 'liquidity';
@@ -135,20 +136,24 @@ export function HomeEvents() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {items.map((event, index) => (
-          <div
-            key={event.id}
-            className="event-card-item animate-fade-up"
-            style={{ animationDelay: `${(index % 12) * 40}ms` }}
-          >
-            <EventCard event={event} sortField={sort} />
-          </div>
-        ))}
+        {isLoading && items.length === 0
+          ? Array.from({ length: 6 }).map((_, i) => (
+              <EventCardSkeleton key={i} />
+            ))
+          : items.map((event, index) => (
+              <div
+                key={event.id}
+                className="event-card-item animate-fade-up"
+                style={{ animationDelay: `${(index % 12) * 40}ms` }}
+              >
+                <EventCard event={event} sortField={sort} />
+              </div>
+            ))}
       </div>
 
       <div ref={sentinelRef} className="h-4" />
 
-      {isLoading && (
+      {isLoading && items.length > 0 && (
         <div className="flex justify-center py-10">
           <div className="spinner" />
         </div>
@@ -273,5 +278,34 @@ function EventCard({ event, sortField }: { event: IndexerEvent; sortField: SortF
         </div>
       </div>
     </Link>
+  );
+}
+
+function EventCardSkeleton() {
+  return (
+    <div className="glass-card overflow-hidden h-full">
+      <span className="sr-only">Loading event...</span>
+      {/* Image area */}
+      <div className="relative aspect-square bg-[var(--card-solid)] overflow-hidden">
+        <Skeleton className="absolute inset-0" />
+      </div>
+      {/* Content area */}
+      <div className="p-3 sm:p-4">
+        <div className="flex items-start gap-2 mb-3">
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+          <Skeleton className="h-5 w-10 rounded-full flex-shrink-0" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <Skeleton className="h-3 w-7" />
+            <Skeleton className="h-4 w-12" />
+          </div>
+          <Skeleton className="w-6 h-6 rounded" />
+        </div>
+      </div>
+    </div>
   );
 }

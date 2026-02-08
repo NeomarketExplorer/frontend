@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useMemo } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, AreaData, Time, AreaSeries } from 'lightweight-charts';
-import { Card, CardContent, CardHeader, CardTitle, cn } from '@app/ui';
+import { Card, CardContent, CardHeader, CardTitle, Skeleton, cn } from '@app/ui';
 
 interface PriceChartProps {
   data: Array<{ t: number; p: number }>;
@@ -154,11 +154,30 @@ export function PriceChart({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div
-            className="flex items-center justify-center bg-muted/50 rounded-lg animate-pulse"
-            style={{ height }}
-          >
-            <span className="text-muted-foreground">Loading chart...</span>
+          <div className="space-y-3" style={{ height }}>
+            <span className="sr-only">Loading chart...</span>
+            {/* Simulate chart grid lines */}
+            <div className="relative h-full rounded-lg overflow-hidden">
+              <Skeleton className="absolute inset-0 rounded-lg" />
+              {/* Horizontal guide lines */}
+              <div className="absolute inset-x-0 top-[20%] border-t border-muted-foreground/5" />
+              <div className="absolute inset-x-0 top-[40%] border-t border-muted-foreground/5" />
+              <div className="absolute inset-x-0 top-[60%] border-t border-muted-foreground/5" />
+              <div className="absolute inset-x-0 top-[80%] border-t border-muted-foreground/5" />
+              {/* Y-axis labels */}
+              <div className="absolute right-2 top-[18%]">
+                <Skeleton className="h-3 w-8" />
+              </div>
+              <div className="absolute right-2 top-[38%]">
+                <Skeleton className="h-3 w-8" />
+              </div>
+              <div className="absolute right-2 top-[58%]">
+                <Skeleton className="h-3 w-8" />
+              </div>
+              <div className="absolute right-2 top-[78%]">
+                <Skeleton className="h-3 w-8" />
+              </div>
+            </div>
           </div>
         ) : chartData.length === 0 ? (
           <div

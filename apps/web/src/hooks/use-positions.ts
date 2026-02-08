@@ -16,6 +16,7 @@ const dataClient = createDataClient({ baseUrl: '/api/data' });
 export const positionKeys = {
   all: ['positions'] as const,
   user: (address: string) => [...positionKeys.all, address] as const,
+  resolved: (address: string) => [...positionKeys.all, 'resolved', address] as const,
   activity: (address: string) => [...positionKeys.all, 'activity', address] as const,
   portfolio: (address: string) => [...positionKeys.all, 'portfolio', address] as const,
 };
@@ -25,6 +26,19 @@ export interface EnrichedPosition extends Position {
   marketId: string | null;
   marketSlug: string | null;
   outcomeName: string;
+  /** Whether the market has been resolved/closed */
+  marketClosed: boolean;
+  /** The final resolution price (if resolved) */
+  resolutionPrice: number | null;
+}
+
+interface MarketInfo {
+  question: string;
+  id: string;
+  slug: string;
+  outcomes: string[];
+  closed: boolean;
+  outcomePrices: number[];
 }
 
 /**
@@ -40,7 +54,7 @@ async function enrichPositionsWithMarketData(
 
   // Gamma API supports condition_ids param for batch lookup
   // Fetch through our proxy to avoid CORS
-  const marketMap: Record<string, { question: string; id: string; slug: string; outcomes: string[] }> = {};
+  const marketMap: Record<string, MarketInfo> = {};
   try {
     const res = await fetch(
       `/api/gamma/markets?condition_ids=${conditionIds.join(',')}&limit=100`
@@ -50,6 +64,16 @@ async function enrichPositionsWithMarketData(
       const list = Array.isArray(markets) ? markets : [];
       for (const m of list) {
         if (m.condition_id) {
+          let outcomePrices: number[] = [];
+          try {
+            if (typeof m.outcomePrices === 'string') {
+              outcomePrices = JSON.parse(m.outcomePrices).map(Number);
+            } else if (Array.isArray(m.outcomePrices)) {
+              outcomePrices = m.outcomePrices.map(Number);
+            }
+          } catch {
+            // ignore parse errors
+          }
           marketMap[m.condition_id] = {
             question: m.question ?? m.title ?? '',
             id: String(m.id ?? ''),
@@ -59,6 +83,8 @@ async function enrichPositionsWithMarketData(
               : typeof m.outcomes === 'string'
                 ? JSON.parse(m.outcomes)
                 : ['Yes', 'No'],
+            closed: m.closed === true,
+            outcomePrices,
           };
         }
       }
@@ -70,12 +96,19 @@ async function enrichPositionsWithMarketData(
   return positions.map((p) => {
     const market = marketMap[p.condition_id];
     const outcomes = market?.outcomes ?? ['Yes', 'No'];
+    const isClosed = market?.closed ?? false;
+    // For resolved markets, the outcome price is 0 or 1
+    const resolutionPrice = isClosed && market?.outcomePrices?.length
+      ? (market.outcomePrices[p.outcome_index] ?? null)
+      : null;
     return {
       ...p,
       marketQuestion: market?.question ?? null,
       marketId: market?.id ?? null,
       marketSlug: market?.slug ?? null,
       outcomeName: outcomes[p.outcome_index] ?? (p.outcome_index === 0 ? 'Yes' : 'No'),
+      marketClosed: isClosed,
+      resolutionPrice,
     };
   });
 }
@@ -96,6 +129,46 @@ export function usePositions() {
     enabled: !!address,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+  });
+}
+
+/**
+ * Fetch resolved/closed positions (historical positions where the market has settled).
+ * Uses sizeThreshold=-1 to get ALL positions including zero-size,
+ * then filters for ones with realized_pnl !== 0 or size === 0 and market closed.
+ */
+export function useResolvedPositions() {
+  const address = useWalletStore((state) => state.address);
+
+  return useQuery({
+    queryKey: positionKeys.resolved(address ?? ''),
+    queryFn: async () => {
+      if (!address) return [];
+      // Fetch all positions including zero-size ones
+      const allPositions = await dataClient.getPositions(address, -1);
+      // Filter for resolved: size=0 with non-zero realized PnL (fully closed out positions)
+      const resolved = allPositions.filter(
+        (p) => p.size === 0 && p.realized_pnl != null && p.realized_pnl !== 0
+      );
+      const enriched = await enrichPositionsWithMarketData(resolved);
+      // Also include open positions in closed markets
+      const openInClosed = (await enrichPositionsWithMarketData(
+        allPositions.filter((p) => p.size > 0)
+      )).filter((p) => p.marketClosed);
+      // Merge and deduplicate by asset
+      const seen = new Set<string>();
+      const result: EnrichedPosition[] = [];
+      for (const p of [...enriched, ...openInClosed]) {
+        if (!seen.has(p.asset)) {
+          seen.add(p.asset);
+          result.push(p);
+        }
+      }
+      return result;
+    },
+    enabled: !!address,
+    staleTime: 60 * 1000,
+    refetchInterval: 120 * 1000,
   });
 }
 

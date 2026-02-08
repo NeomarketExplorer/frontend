@@ -4,15 +4,16 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ConnectButton } from '@/components/connect-button';
 import { AuthGuard } from '@/components/auth-guard';
-import { toast } from '@app/ui';
-import { usePortfolio, usePositions, useActivity, useOpenOrders, useCancelOrder, type EnrichedPosition } from '@/hooks';
+import { PortfolioChart } from '@/components/portfolio-chart';
+import { Skeleton, toast } from '@app/ui';
+import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, type EnrichedPosition } from '@/hooks';
 import { useWalletStore } from '@/stores';
 
 export default function PortfolioPage() {
   const { isConnected, address, usdcBalance } = useWalletStore();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: positions, isLoading: positionsLoading } = usePositions();
-  const { data: activity, isLoading: activityLoading } = useActivity(20);
+  const { data: activity, isLoading: activityLoading } = useActivity(50);
 
   return (
     <AuthGuard
@@ -141,6 +142,14 @@ function PortfolioContent({
         />
       </div>
 
+      {/* Portfolio Value Chart */}
+      {!activityLoading && (
+        <PortfolioChart
+          activities={activity ?? []}
+          currentValue={portfolio?.totalValue ?? 0}
+        />
+      )}
+
       {/* Tabs */}
       <div className="flex items-center gap-1.5">
         {tabs.map((tab) => (
@@ -194,7 +203,7 @@ function SummaryCard({
         {label}
       </p>
       {loading ? (
-        <div className="h-7 w-20 bg-[var(--card-border)] animate-pulse" />
+        <Skeleton className="h-7 w-20" />
       ) : (
         <p className="font-mono font-bold text-lg" style={{ color }}>
           {value}
@@ -204,6 +213,8 @@ function SummaryCard({
   );
 }
 
+type PositionSubTab = 'open' | 'resolved';
+
 function PositionsTab({
   positions,
   loading,
@@ -211,40 +222,121 @@ function PositionsTab({
   positions: EnrichedPosition[] | undefined;
   loading: boolean;
 }) {
-  if (loading) {
-    return (
-      <div className="glass-card overflow-hidden">
-        <div className="p-4 space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="h-4 w-48 bg-[var(--card-border)]" />
-                <div className="h-3 w-32 bg-[var(--card-border)]" />
-              </div>
-              <div className="h-5 w-16 bg-[var(--card-border)]" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const [subTab, setSubTab] = useState<PositionSubTab>('open');
+  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions();
 
-  if (!positions || positions.length === 0) {
-    return (
-      <div className="glass-card p-10 text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
-          <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7 text-[var(--foreground-muted)]" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="20" x2="12" y2="10" />
-            <line x1="18" y1="20" x2="18" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="16" />
-          </svg>
-        </div>
-        <p className="font-mono text-sm text-[var(--foreground-muted)] mb-4">No open positions yet.</p>
-        <Link href="/markets" className="btn btn-primary">
-          Browse Markets
-        </Link>
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab toggle: Open / Resolved */}
+      <div className="flex items-center gap-1 p-0.5 bg-[var(--card)] w-fit">
+        <button
+          onClick={() => setSubTab('open')}
+          className={`font-mono text-xs px-3 py-1.5 transition-colors ${
+            subTab === 'open'
+              ? 'bg-[var(--accent)] text-[var(--background)] font-bold'
+              : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Open
+          {positions && positions.length > 0 && (
+            <span className="ml-1.5 opacity-70">({positions.length})</span>
+          )}
+        </button>
+        <button
+          onClick={() => setSubTab('resolved')}
+          className={`font-mono text-xs px-3 py-1.5 transition-colors ${
+            subTab === 'resolved'
+              ? 'bg-[var(--accent)] text-[var(--background)] font-bold'
+              : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Resolved
+          {resolvedPositions && resolvedPositions.length > 0 && (
+            <span className="ml-1.5 opacity-70">({resolvedPositions.length})</span>
+          )}
+        </button>
       </div>
-    );
+
+      {subTab === 'open' ? (
+        <OpenPositionsTable positions={positions} loading={loading} />
+      ) : (
+        <ResolvedPositionsTable positions={resolvedPositions} loading={resolvedLoading} />
+      )}
+    </div>
+  );
+}
+
+function PositionsLoadingSkeleton() {
+  return (
+    <div className="glass-card overflow-hidden">
+      <span className="sr-only">Loading positions...</span>
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="text-left"><Skeleton className="h-3 w-14" /></th>
+              <th className="text-center w-16"><Skeleton className="h-3 w-10 mx-auto" /></th>
+              <th className="text-right w-24"><Skeleton className="h-3 w-12 ml-auto" /></th>
+              <th className="text-right w-24"><Skeleton className="h-3 w-16 ml-auto" /></th>
+              <th className="text-right w-24"><Skeleton className="h-3 w-12 ml-auto" /></th>
+              <th className="text-right w-20"><Skeleton className="h-3 w-10 ml-auto" /></th>
+            </tr>
+          </thead>
+          <tbody>
+            {[1, 2, 3].map((i) => (
+              <tr key={i}>
+                <td><Skeleton className="h-4 w-48" /></td>
+                <td className="text-center"><Skeleton className="h-5 w-10 mx-auto rounded-full" /></td>
+                <td className="text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
+                <td className="text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
+                <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                <td className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PositionsEmptyState({ message }: { message: string }) {
+  return (
+    <div className="glass-card p-10 text-center">
+      <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
+        <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7 text-[var(--foreground-muted)]" stroke="currentColor" strokeWidth="2">
+          <line x1="12" y1="20" x2="12" y2="10" />
+          <line x1="18" y1="20" x2="18" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="16" />
+        </svg>
+      </div>
+      <p className="font-mono text-sm text-[var(--foreground-muted)] mb-4">{message}</p>
+      <Link href="/markets" className="btn btn-primary">
+        Browse Markets
+      </Link>
+    </div>
+  );
+}
+
+/** Format a dollar amount with sign and color class */
+function formatPnlDollar(value: number): { text: string; className: string } {
+  const isPositive = value >= 0;
+  return {
+    text: `${isPositive ? '+' : '-'}$${Math.abs(value).toFixed(2)}`,
+    className: isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]',
+  };
+}
+
+function OpenPositionsTable({
+  positions,
+  loading,
+}: {
+  positions: EnrichedPosition[] | undefined;
+  loading: boolean;
+}) {
+  if (loading) return <PositionsLoadingSkeleton />;
+  if (!positions || positions.length === 0) {
+    return <PositionsEmptyState message="No open positions yet." />;
   }
 
   return (
@@ -255,17 +347,23 @@ function PositionsTab({
             <tr>
               <th className="text-left">Market</th>
               <th className="text-center w-16">Side</th>
-              <th className="text-right w-24">Shares</th>
+              <th className="text-right w-20">Shares</th>
               <th className="text-right w-24">Avg Price</th>
+              <th className="text-right w-28">Cost Basis</th>
               <th className="text-right w-24">Value</th>
-              <th className="text-right w-20">P&L</th>
+              <th className="text-right w-28">Unrealized P&L</th>
             </tr>
           </thead>
           <tbody>
             {positions.map((position, i) => {
               const isYes = position.outcomeName.toLowerCase() === 'yes';
-              const pnlPct = position.pnl_percent ?? 0;
-              const pnlPositive = pnlPct >= 0;
+              const avgPrice = position.avg_price ?? 0;
+              const costBasis = avgPrice * position.size;
+              const currentValue = position.current_value ?? 0;
+              const unrealizedPnl = position.unrealized_pnl ?? (currentValue - costBasis);
+              const pnlPct = position.pnl_percent ?? (costBasis > 0 ? ((currentValue - costBasis) / costBasis) * 100 : 0);
+              const pnlPositive = unrealizedPnl >= 0;
+              const pnlDollar = formatPnlDollar(unrealizedPnl);
               const marketLink = position.marketId
                 ? `/market/${position.marketId}`
                 : null;
@@ -295,19 +393,134 @@ function PositionsTab({
                   </td>
                   <td className="text-right">
                     <span className="font-mono text-sm text-[var(--foreground-muted)]">
-                      ${(position.avg_price ?? 0).toFixed(2)}
+                      {(avgPrice * 100).toFixed(0)}c
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <span className="font-mono text-sm text-[var(--foreground-muted)]">
+                      ${costBasis.toFixed(2)}
                     </span>
                   </td>
                   <td className="text-right">
                     <span className="font-mono text-sm font-bold">
-                      ${position.current_value?.toFixed(2) ?? '0.00'}
+                      ${currentValue.toFixed(2)}
                     </span>
                   </td>
                   <td className="text-right">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span
+                        className={`font-mono text-xs font-bold ${pnlDollar.className}`}
+                      >
+                        {pnlDollar.text}
+                      </span>
+                      <span
+                        className={`font-mono text-[0.6rem] ${pnlPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
+                      >
+                        {pnlPositive ? '+' : ''}{pnlPct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+
+              return marketLink ? (
+                <Link key={i} href={marketLink} className="contents">
+                  {row}
+                </Link>
+              ) : row;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ResolvedPositionsTable({
+  positions,
+  loading,
+}: {
+  positions: EnrichedPosition[] | undefined;
+  loading: boolean;
+}) {
+  if (loading) return <PositionsLoadingSkeleton />;
+  if (!positions || positions.length === 0) {
+    return <PositionsEmptyState message="No resolved positions yet." />;
+  }
+
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="text-left">Market</th>
+              <th className="text-center w-16">Side</th>
+              <th className="text-right w-24">Entry Price</th>
+              <th className="text-right w-24">Resolution</th>
+              <th className="text-right w-20">Outcome</th>
+              <th className="text-right w-28">Realized P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((position, i) => {
+              const isYes = position.outcomeName.toLowerCase() === 'yes';
+              const avgPrice = position.avg_price ?? 0;
+              const resolutionPrice = position.resolutionPrice;
+              const realizedPnl = position.realized_pnl ?? 0;
+              const pnlDollar = formatPnlDollar(realizedPnl);
+              // Determine if the outcome was a win: resolution price is 1 for the winning side
+              const isWin = resolutionPrice != null && resolutionPrice > 0.5;
+              const marketLink = position.marketId
+                ? `/market/${position.marketId}`
+                : null;
+
+              const row = (
+                <tr
+                  key={i}
+                  className="market-row-item animate-fade-up group"
+                  style={{ animationDelay: `${i * 40}ms` }}
+                >
+                  <td>
+                    <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
+                      {position.marketQuestion ?? `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`}
+                    </span>
+                  </td>
+                  <td className="text-center">
                     <span
-                      className={`font-mono text-xs font-bold ${pnlPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
+                      className={`tag ${isYes ? 'tag-success' : 'tag-danger'}`}
                     >
-                      {pnlPositive ? '+' : ''}{pnlPct.toFixed(1)}%
+                      {position.outcomeName}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <span className="font-mono text-sm text-[var(--foreground-muted)]">
+                      {(avgPrice * 100).toFixed(0)}c
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <span className="font-mono text-sm">
+                      {resolutionPrice != null
+                        ? `${(resolutionPrice * 100).toFixed(0)}c`
+                        : '-'}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    {resolutionPrice != null ? (
+                      <span
+                        className={`tag ${isWin ? 'tag-success' : 'tag-danger'}`}
+                      >
+                        {isWin ? 'Won' : 'Lost'}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs text-[var(--foreground-muted)]">-</span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    <span
+                      className={`font-mono text-sm font-bold ${pnlDollar.className}`}
+                    >
+                      {pnlDollar.text}
                     </span>
                   </td>
                 </tr>
@@ -335,16 +548,37 @@ function ActivityTab({
 }) {
   if (loading) {
     return (
-      <div className="glass-card p-4 space-y-3">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="animate-pulse flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <div className="h-5 w-12 bg-[var(--card-border)]" />
-              <div className="h-4 w-32 bg-[var(--card-border)]" />
-            </div>
-            <div className="h-4 w-24 bg-[var(--card-border)]" />
-          </div>
-        ))}
+      <div className="glass-card overflow-hidden">
+        <span className="sr-only">Loading activity...</span>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="text-left w-16"><Skeleton className="h-3 w-10" /></th>
+                <th className="text-left"><Skeleton className="h-3 w-10" /></th>
+                <th className="text-right w-24"><Skeleton className="h-3 w-10 ml-auto" /></th>
+                <th className="text-right w-24"><Skeleton className="h-3 w-12 ml-auto" /></th>
+                <th className="text-right w-24"><Skeleton className="h-3 w-12 ml-auto" /></th>
+                <th className="text-right w-36"><Skeleton className="h-3 w-20 ml-auto" /></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <tr key={i}>
+                  <td><Skeleton className="h-5 w-12 rounded-full" /></td>
+                  <td>
+                    <Skeleton className="h-4 w-16 mb-1" />
+                    <Skeleton className="h-3 w-24" />
+                  </td>
+                  <td className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-10 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-3 w-28 ml-auto" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -431,16 +665,34 @@ function OrdersTab({
 }) {
   if (loading) {
     return (
-      <div className="glass-card p-4 space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="animate-pulse flex items-center justify-between py-2">
-            <div className="space-y-2">
-              <div className="h-4 w-48 bg-[var(--card-border)]" />
-              <div className="h-3 w-32 bg-[var(--card-border)]" />
-            </div>
-            <div className="h-5 w-16 bg-[var(--card-border)]" />
-          </div>
-        ))}
+      <div className="glass-card overflow-hidden">
+        <span className="sr-only">Loading orders...</span>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="text-left w-16"><Skeleton className="h-3 w-10" /></th>
+                <th className="text-right w-20"><Skeleton className="h-3 w-12 ml-auto" /></th>
+                <th className="text-right w-20"><Skeleton className="h-3 w-10 ml-auto" /></th>
+                <th className="text-right w-20"><Skeleton className="h-3 w-12 ml-auto" /></th>
+                <th className="text-right w-36"><Skeleton className="h-3 w-16 ml-auto" /></th>
+                <th className="text-right w-20" />
+              </tr>
+            </thead>
+            <tbody>
+              {[1, 2, 3].map((i) => (
+                <tr key={i}>
+                  <td><Skeleton className="h-5 w-12 rounded-full" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-10 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-3 w-28 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-7 w-16 ml-auto rounded-md" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
