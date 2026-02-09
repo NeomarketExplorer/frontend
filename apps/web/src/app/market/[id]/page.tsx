@@ -221,7 +221,7 @@ export default function MarketPage({ params }: MarketPageProps) {
   const { data: trades, isLoading: tradesLoading, isError: tradesError } = useTrades(tokenId);
   const { data: candleData, isLoading: candlesLoading } = useMarketCandles(
     market?.conditionId,
-    tokenId,
+    null,
     chartInterval,
   );
 
