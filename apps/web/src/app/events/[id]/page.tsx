@@ -6,6 +6,99 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
+// ---------------------------------------------------------------------------
+// CLOB market status fetching (server-side, with concurrency limit + cache)
+// ---------------------------------------------------------------------------
+
+interface ClobStatus {
+  closed: boolean;
+  accepting_orders: boolean;
+  enable_order_book: boolean;
+}
+
+const CLOB_BASE = 'https://clob.polymarket.com';
+const CLOB_CONCURRENCY = 6;
+
+// Simple in-memory cache (server-side, per-request lifecycle in Next.js but
+// helps when multiple events share markets in the same server process)
+const clobCache = new Map<string, { data: ClobStatus; ts: number }>();
+const CACHE_TTL = 60_000; // 60s
+
+async function fetchClobStatus(conditionId: string): Promise<ClobStatus | null> {
+  const cached = clobCache.get(conditionId);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+
+  try {
+    const res = await fetch(`${CLOB_BASE}/markets/${conditionId}`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const status: ClobStatus = {
+      closed: !!data.closed,
+      accepting_orders: data.accepting_orders !== false,
+      enable_order_book: data.enable_order_book !== false,
+    };
+    clobCache.set(conditionId, { data: status, ts: Date.now() });
+    return status;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchClobStatuses(
+  conditionIds: string[],
+): Promise<Map<string, ClobStatus>> {
+  const results = new Map<string, ClobStatus>();
+  const unique = [...new Set(conditionIds)];
+
+  // Process in batches of CLOB_CONCURRENCY
+  for (let i = 0; i < unique.length; i += CLOB_CONCURRENCY) {
+    const batch = unique.slice(i, i + CLOB_CONCURRENCY);
+    await Promise.allSettled(
+      batch.map(async (cid) => {
+        const status = await fetchClobStatus(cid);
+        if (status) results.set(cid, status);
+      }),
+    );
+  }
+
+  return results;
+}
+
+type MarketStatus = 'live' | 'in_review' | 'closed';
+
+function classifyMarket(
+  market: IndexerMarket,
+  clobStatus: ClobStatus | undefined,
+): MarketStatus {
+  // If indexer says closed → closed
+  if (market.closed) return 'closed';
+
+  // If CLOB says closed or orderbook disabled → closed
+  if (clobStatus?.closed || clobStatus?.enable_order_book === false) return 'closed';
+
+  // If indexer says active and not archived → check CLOB for accepting_orders
+  if (market.active && !market.archived) {
+    if (clobStatus && !clobStatus.accepting_orders) return 'in_review';
+    return 'live';
+  }
+
+  // Indexer says not active (but not closed) — check CLOB as source of truth
+  if (clobStatus) {
+    if (!clobStatus.accepting_orders) return 'in_review';
+    // CLOB says it's open but indexer disagrees — trust CLOB
+    return 'live';
+  }
+
+  // No CLOB data, indexer says not active — treat as closed
+  return 'closed';
+}
+
+// ---------------------------------------------------------------------------
+// Metadata
+// ---------------------------------------------------------------------------
+
 export async function generateMetadata({
   params,
 }: {
@@ -43,6 +136,10 @@ export async function generateMetadata({
   }
 }
 
+// ---------------------------------------------------------------------------
+// JSON-LD
+// ---------------------------------------------------------------------------
+
 function EventJsonLd({ event }: { event: { id: string; title: string; description: string | null; image: string | null; closed: boolean; markets?: { endDateIso: string | null }[] } }) {
   const endDate = event.markets?.find(m => m.endDateIso)?.endDateIso ?? null;
 
@@ -76,6 +173,10 @@ function EventJsonLd({ event }: { event: { id: string; title: string; descriptio
   );
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default async function EventPage({
   params,
 }: {
@@ -84,8 +185,31 @@ export default async function EventPage({
   const { id } = await params;
   const event = await getEvent(id);
   const visibleMarkets = event.markets?.filter((m) => !isPlaceholderMarket(m)) ?? [];
-  const liveMarkets = visibleMarkets.filter((m) => !m.closed).sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
-  const resolvedMarkets = visibleMarkets.filter((m) => m.closed).sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+
+  // Fetch CLOB status for all markets to get accurate live/closed/in-review
+  const conditionIds = visibleMarkets.map((m) => m.conditionId);
+  const clobStatuses = await fetchClobStatuses(conditionIds);
+
+  // Classify each market
+  const classified = visibleMarkets.map((m) => ({
+    market: m,
+    status: classifyMarket(m, clobStatuses.get(m.conditionId)),
+  }));
+
+  const liveMarkets = classified
+    .filter((c) => c.status === 'live')
+    .map((c) => c.market)
+    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+
+  const inReviewMarkets = classified
+    .filter((c) => c.status === 'in_review')
+    .map((c) => c.market)
+    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+
+  const closedMarkets = classified
+    .filter((c) => c.status === 'closed')
+    .map((c) => c.market)
+    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -158,7 +282,7 @@ export default async function EventPage({
               <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <StatItem label="Volume" value={formatVolume(event.volume)} color="cyan" />
                 <StatItem label="Liquidity" value={formatVolume(event.liquidity)} color="green" />
-                <StatItem label="Markets" value={String(visibleMarkets.length)} color="pink" />
+                <StatItem label="Live" value={String(liveMarkets.length)} color="pink" />
               </div>
             </div>
           </div>
@@ -181,7 +305,7 @@ export default async function EventPage({
       <div>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--accent)] rounded-full" />
-          <h2 className="text-lg sm:text-xl font-bold">Markets</h2>
+          <h2 className="text-lg sm:text-xl font-bold">Live</h2>
           <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
         </div>
 
@@ -211,17 +335,34 @@ export default async function EventPage({
         )}
       </div>
 
-      {/* Resolved Markets */}
-      {resolvedMarkets.length > 0 && (
+      {/* In Review Markets */}
+      {inReviewMarkets.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-5 bg-gradient-to-b from-yellow-500 to-yellow-500/30 rounded-full" />
+            <h2 className="text-lg sm:text-xl font-bold text-yellow-500">In Review</h2>
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">({inReviewMarkets.length})</span>
+          </div>
+
+          <div className="space-y-3 opacity-85">
+            {inReviewMarkets.map((market, index) => (
+              <MarketCard key={market.id} market={market} index={index} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Resolved / Closed Markets */}
+      {closedMarkets.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-1 h-5 bg-gradient-to-b from-[var(--foreground-muted)] to-transparent rounded-full" />
             <h2 className="text-lg sm:text-xl font-bold text-[var(--foreground-muted)]">Resolved</h2>
-            <span className="font-mono text-xs text-[var(--foreground-muted)]">({resolvedMarkets.length})</span>
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">({closedMarkets.length})</span>
           </div>
 
           <div className="space-y-3 opacity-75">
-            {resolvedMarkets.map((market, index) => (
+            {closedMarkets.map((market, index) => (
               <MarketCard key={market.id} market={market} index={index} />
             ))}
           </div>
