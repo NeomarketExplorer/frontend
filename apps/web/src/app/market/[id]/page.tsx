@@ -221,7 +221,9 @@ export default function MarketPage({ params }: MarketPageProps) {
   const { data: trades, isLoading: tradesLoading, isError: tradesError } = useTrades(tokenId);
   const { data: priceHistory, isLoading: priceHistoryLoading } = usePriceHistory(
     market?.conditionId ?? null,
-    chartInterval
+    chartInterval,
+    id,
+    tokenId,
   );
 
   useRealtimeOrderbook(tokenId);
