@@ -4,7 +4,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createClobClient } from '@app/api';
-import { getMarketHistory } from '@/lib/indexer';
 
 const clobClient = createClobClient({ baseUrl: '/api/clob' });
 
@@ -15,8 +14,6 @@ export const orderbookKeys = {
   midpoint: (tokenId: string) => [...orderbookKeys.all, 'midpoint', tokenId] as const,
   spread: (tokenId: string) => [...orderbookKeys.all, 'spread', tokenId] as const,
   trades: (tokenId: string) => [...orderbookKeys.all, 'trades', tokenId] as const,
-  priceHistory: (market: string, interval: string) =>
-    [...orderbookKeys.all, 'history', market, interval] as const,
 };
 
 /**
@@ -97,45 +94,3 @@ export function useTrades(tokenId: string | null, limit = 50) {
   });
 }
 
-/**
- * Fetch price history for a market.
- * Tries CLOB /prices-history first; falls back to indexer /markets/:id/history.
- */
-export function usePriceHistory(
-  market: string | null,
-  interval: '1h' | '6h' | '1d' | '1w' | 'max' = '1w',
-  marketId?: string | null,
-  tokenId?: string | null,
-) {
-  return useQuery({
-    queryKey: orderbookKeys.priceHistory(market ?? '', interval),
-    queryFn: async () => {
-      if (!market) return [];
-
-      // Try CLOB first
-      try {
-        const clobData = await clobClient.getPriceHistory(market, interval);
-        if (clobData.length > 0) return clobData;
-      } catch {
-        // CLOB may error — fall through to indexer
-      }
-
-      // Fallback: indexer price history
-      if (!marketId) return [];
-      try {
-        const indexerData = await getMarketHistory(marketId, interval);
-        // Filter by selected token and convert to { t, p } format
-        return indexerData
-          .filter((d) => !tokenId || d.tokenId === tokenId)
-          .map((d) => ({
-            t: Math.floor(new Date(d.timestamp).getTime() / 1000),
-            p: d.price,
-          }));
-      } catch {
-        return [];
-      }
-    },
-    enabled: !!market,
-    staleTime: 60 * 1000,
-  });
-}

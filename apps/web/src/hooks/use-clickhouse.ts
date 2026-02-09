@@ -5,9 +5,11 @@ import { useWalletStore } from '@/stores';
 import {
   getPortfolioHistory,
   getLeaderboard,
+  getMarketCandles,
   getMarketStats,
   getOnChainTrades,
   getUserStats,
+  type CandleResponse,
   type PortfolioHistory,
   type UserStats,
   type MarketStats,
@@ -64,6 +66,25 @@ export function useOnChainTrades(tokenId?: string | null) {
     queryKey: ['ch-trades', tokenId],
     queryFn: () => getOnChainTrades(tokenId!),
     enabled: !!tokenId,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarketCandles(
+  conditionId?: string | null,
+  tokenId?: string | null,
+  interval?: string,
+) {
+  return useQuery<CandleResponse>({
+    queryKey: ['ch-candles', conditionId, tokenId, interval],
+    queryFn: () =>
+      getMarketCandles({
+        conditionId: conditionId!,
+        tokenId: tokenId ?? undefined,
+        interval,
+      }),
+    enabled: !!conditionId,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useEffect, useMemo, useRef, useState } from 'react';
-import { PriceChart } from '@/components/price-chart';
+import { CandleChart } from '@/components/candle-chart';
 import {
   Button,
   Card,
@@ -21,7 +21,6 @@ import {
   useMarket,
   useOrderbook,
   useMidpoint,
-  usePriceHistory,
   useTrades,
   useRealtimeOrderbook,
   usePlaceOrder,
@@ -34,6 +33,7 @@ import {
   useOpenOrders,
   useCancelOrder,
   useMarketStats,
+  useMarketCandles,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
@@ -41,7 +41,7 @@ import { buildOutcomeEntries, isYesOutcome, isNoOutcome, type OutcomeEntry } fro
 import { formatVolume } from '@/lib/indexer';
 import { usePrivyAvailable } from '@/providers/privy-provider';
 
-type TimeInterval = '1h' | '6h' | '1d' | '1w' | 'max';
+type TimeInterval = '1h' | '4h' | '1d' | '1w';
 
 interface MarketPageProps {
   params: Promise<{ id: string }>;
@@ -219,11 +219,10 @@ export default function MarketPage({ params }: MarketPageProps) {
   const tokenId = mappedTokenIds[orderForm.outcomeIndex] ?? null;
   const { data: orderbook, isLoading: orderbookLoading, isError: orderbookError } = useOrderbook(tokenId);
   const { data: trades, isLoading: tradesLoading, isError: tradesError } = useTrades(tokenId);
-  const { data: priceHistory, isLoading: priceHistoryLoading } = usePriceHistory(
-    market?.conditionId ?? null,
-    chartInterval,
-    id,
+  const { data: candleData, isLoading: candlesLoading } = useMarketCandles(
+    market?.conditionId,
     tokenId,
+    chartInterval,
   );
 
   useRealtimeOrderbook(tokenId);
@@ -264,7 +263,7 @@ export default function MarketPage({ params }: MarketPageProps) {
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <div className="space-y-2">
               <div className="flex items-center justify-end gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
+                {Array.from({ length: 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-8 w-10" />
                 ))}
               </div>
@@ -389,7 +388,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         <div className="lg:col-span-2 space-y-4 sm:space-y-6">
           <div className="space-y-2">
             <div className="flex items-center justify-end gap-1 overflow-x-auto">
-              {(['1h', '6h', '1d', '1w', 'max'] as const).map((interval) => (
+              {(['1h', '4h', '1d', '1w'] as const).map((interval) => (
                 <Button
                   key={interval}
                   variant={chartInterval === interval ? 'default' : 'ghost'}
@@ -401,9 +400,9 @@ export default function MarketPage({ params }: MarketPageProps) {
                 </Button>
               ))}
             </div>
-            <PriceChart
-              data={priceHistory ?? []}
-              isLoading={priceHistoryLoading}
+            <CandleChart
+              candles={candleData?.candles ?? []}
+              isLoading={candlesLoading}
               title={outcomes[orderForm.outcomeIndex]?.label ?? 'Price'}
               height={220}
             />

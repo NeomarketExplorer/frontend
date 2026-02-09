@@ -72,6 +72,23 @@ export interface LeaderboardResponse {
   traders: LeaderboardTrader[];
 }
 
+export interface Candle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  trades: number;
+}
+
+export interface CandleResponse {
+  conditionId: string;
+  tokenId: string;
+  interval: string;
+  candles: Candle[];
+}
+
 export interface OnChainTrade {
   id: string;
   price: number;
@@ -157,4 +174,22 @@ export async function getOnChainTrades(
   if (limit) params.set('limit', limit.toString());
   if (offset) params.set('offset', offset.toString());
   return fetchClickHouse<OnChainTrade[]>(`/trades?${params}`);
+}
+
+export async function getMarketCandles(opts: {
+  conditionId?: string;
+  tokenId?: string;
+  interval?: string;
+  from?: number;
+  to?: number;
+  limit?: number;
+}): Promise<CandleResponse> {
+  const params = new URLSearchParams();
+  if (opts.conditionId) params.set('conditionId', opts.conditionId);
+  if (opts.tokenId) params.set('tokenId', opts.tokenId);
+  if (opts.interval) params.set('interval', opts.interval);
+  if (opts.from) params.set('from', opts.from.toString());
+  if (opts.to) params.set('to', opts.to.toString());
+  if (opts.limit) params.set('limit', opts.limit.toString());
+  return fetchClickHouse<CandleResponse>(`/market/candles?${params}`);
 }
