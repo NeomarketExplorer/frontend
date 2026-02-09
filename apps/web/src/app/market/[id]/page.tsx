@@ -33,6 +33,7 @@ import {
   useEnableTrading,
   useOpenOrders,
   useCancelOrder,
+  useMarketStats,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
 import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
@@ -180,6 +181,7 @@ export default function MarketPage({ params }: MarketPageProps) {
   const { data: midpointA } = useMidpoint(tokenIdA);
   const { data: midpointB } = useMidpoint(tokenIdB);
   const { data: clobMarket, isLoading: clobMarketLoading } = useClobMarket(market?.conditionId ?? null);
+  const { data: marketStats } = useMarketStats(market?.conditionId);
 
   const mappedTokenIds = useMemo(() => {
     if (outcomes.length === 0) return outcomeTokenIds;
@@ -368,6 +370,18 @@ export default function MarketPage({ params }: MarketPageProps) {
           </div>
         </div>
       </div>
+
+      {marketStats?.uniqueTraders != null && (
+        <div className="font-mono text-xs text-[var(--foreground-muted)] mb-4 sm:mb-6 flex flex-wrap gap-x-3 gap-y-1">
+          <span>Traders: {marketStats.uniqueTraders.toLocaleString()}</span>
+          <span className="text-border">|</span>
+          <span>On-chain Vol: {formatVolume(marketStats.onChainVolume)}</span>
+          <span className="text-border">|</span>
+          <span>Trades: {marketStats.totalTrades.toLocaleString()}</span>
+          <span className="text-border">|</span>
+          <span>Holders: {marketStats.holderCount.toLocaleString()}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 space-y-4 sm:space-y-6">

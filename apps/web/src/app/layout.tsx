@@ -107,6 +107,7 @@ export default function RootLayout({
                       <NavLink href="/events" label="Events" />
                       <NavLink href="/markets" label="Markets" />
                       <NavLink href="/portfolio" label="Portfolio" />
+                      <NavLink href="/leaderboard" label="Leaderboard" />
                     </div>
 
                     {/* Search + Connect */}
@@ -124,6 +125,7 @@ export default function RootLayout({
                   <NavLink href="/events" label="Events" />
                   <NavLink href="/markets" label="Markets" />
                   <NavLink href="/portfolio" label="Portfolio" />
+                  <NavLink href="/leaderboard" label="Leaderboard" />
                 </div>
               </div>
 

@@ -1,90 +1,66 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, AreaData, Time, AreaSeries } from 'lightweight-charts';
 import { Card, CardContent, CardHeader, CardTitle } from '@app/ui';
+import { usePortfolioHistory } from '@/hooks';
 import type { Activity } from '@app/api';
 
+type IntervalOption = '1W' | '1M' | '3M' | 'ALL';
+
+interface IntervalConfig {
+  interval: string;
+  from: string | undefined;
+}
+
+const INTERVAL_OPTIONS: { label: IntervalOption; config: IntervalConfig }[] = [
+  { label: '1W', config: { interval: '1h', from: daysAgo(7) } },
+  { label: '1M', config: { interval: '6h', from: daysAgo(30) } },
+  { label: '3M', config: { interval: '1d', from: daysAgo(90) } },
+  { label: 'ALL', config: { interval: '1d', from: undefined } },
+];
+
+function daysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
 interface PortfolioChartProps {
-  activities: Activity[];
+  address: string;
   currentValue: number;
+  activities?: Activity[];
   className?: string;
 }
 
-/**
- * Portfolio value chart that approximates historical portfolio value
- * by computing a cumulative running total from trade activity:
- * BUY adds value, SELL subtracts value.
- */
-export function PortfolioChart({ activities, currentValue, className }: PortfolioChartProps) {
+export function PortfolioChart({ address: _address, currentValue, activities, className }: PortfolioChartProps) {
+  const [selectedInterval, setSelectedInterval] = useState<IntervalOption>('1M');
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
 
-  // Build cumulative portfolio value data from activity
+  const intervalConfig = INTERVAL_OPTIONS.find((o) => o.label === selectedInterval)!.config;
+  const { data: history, isLoading, isError } = usePortfolioHistory(
+    intervalConfig.interval,
+    intervalConfig.from,
+  );
+
+  const hasClickHouseData = !isError && history?.snapshots && history.snapshots.length > 0;
+
+  // Build chart data from ClickHouse snapshots, or fall back to activity-based approximation
   const chartData = useMemo<AreaData<Time>[]>(() => {
-    if (!activities || activities.length === 0) return [];
-
-    // Filter to trades that have a value and timestamp, sort oldest-first
-    const trades = activities
-      .filter((a) => a.type === 'trade' && a.value != null && a.timestamp)
-      .map((a) => ({
-        time: Math.floor(new Date(a.timestamp).getTime() / 1000),
-        value: a.value!,
-        side: a.side,
-      }))
-      .sort((a, b) => a.time - b.time);
-
-    if (trades.length === 0) return [];
-
-    // Build cumulative value: BUY adds cost, SELL subtracts
-    let cumulative = 0;
-    const points: AreaData<Time>[] = [];
-    const seenTimes = new Set<number>();
-
-    for (const trade of trades) {
-      if (trade.side === 'BUY') {
-        cumulative += trade.value;
-      } else if (trade.side === 'SELL') {
-        cumulative -= trade.value;
-      } else {
-        // Other types (transfer, redeem, etc.) - add value
-        cumulative += trade.value;
-      }
-
-      // lightweight-charts requires unique timestamps; if duplicate, skip earlier
-      // (the last entry at a given second wins)
-      if (seenTimes.has(trade.time)) {
-        // Update the last point with this timestamp
-        const lastIdx = points.length - 1;
-        if (lastIdx >= 0) {
-          points[lastIdx] = {
-            time: trade.time as Time,
-            value: Math.max(cumulative, 0),
-          };
-        }
-      } else {
-        seenTimes.add(trade.time);
-        points.push({
-          time: trade.time as Time,
-          value: Math.max(cumulative, 0),
-        });
-      }
+    if (hasClickHouseData) {
+      return mapSnapshotsToChartData(history!.snapshots, currentValue);
     }
 
-    // Append current value as the latest point (now)
-    const now = Math.floor(Date.now() / 1000);
-    if (!seenTimes.has(now)) {
-      points.push({
-        time: now as Time,
-        value: Math.max(currentValue, 0),
-      });
+    if (activities && activities.length > 0) {
+      return buildCumulativeChartData(activities, currentValue);
     }
 
-    return points;
-  }, [activities, currentValue]);
+    return [];
+  }, [hasClickHouseData, history, activities, currentValue]);
 
-  // Calculate value change
+  // Calculate value change between first and last data points
   const valueChange = useMemo(() => {
     if (chartData.length < 2) return null;
     const first = chartData[0].value;
@@ -155,12 +131,11 @@ export function PortfolioChart({ activities, currentValue, className }: Portfoli
     areaSeries.setData(chartData);
     chart.timeScale().fitContent();
 
-    // Handle resize
-    const handleResize = () => {
+    function handleResize() {
       if (chartContainerRef.current) {
         chart.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
-    };
+    }
 
     window.addEventListener('resize', handleResize);
 
@@ -178,7 +153,11 @@ export function PortfolioChart({ activities, currentValue, className }: Portfoli
     }
   }, [chartData]);
 
-  if (!activities || activities.length === 0) {
+  const hasActivities = activities && activities.length > 0;
+  const hasTrades = hasActivities && activities.some((a) => a.type === 'trade' && a.value != null);
+
+  // Empty state: no ClickHouse data loading, no activity data at all
+  if (!isLoading && !hasClickHouseData && !hasActivities) {
     return (
       <div className={className}>
         <div className="glass-card p-6 text-center">
@@ -193,10 +172,8 @@ export function PortfolioChart({ activities, currentValue, className }: Portfoli
     );
   }
 
-  // Check if we have any plottable trade data
-  const hasTrades = activities.some((a) => a.type === 'trade' && a.value != null);
-
-  if (!hasTrades) {
+  // Fallback path has activities but no plottable trades
+  if (!isLoading && !hasClickHouseData && !hasTrades) {
     return (
       <div className={className}>
         <div className="glass-card p-6 text-center">
@@ -230,9 +207,34 @@ export function PortfolioChart({ activities, currentValue, className }: Portfoli
             )}
           </div>
         </div>
+        {/* Interval selector */}
+        <div className="flex items-center gap-1 mt-2">
+          {INTERVAL_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              onClick={() => setSelectedInterval(option.label)}
+              className={`font-mono text-[0.65rem] px-2.5 py-1 transition-colors ${
+                selectedInterval === option.label
+                  ? 'bg-[var(--accent)] text-[var(--background)] font-bold'
+                  : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)] bg-[var(--card)]'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </CardHeader>
       <CardContent>
-        {chartData.length === 0 ? (
+        {isLoading ? (
+          <div
+            className="flex items-center justify-center rounded-lg"
+            style={{ height, background: 'rgba(156, 163, 175, 0.05)' }}
+          >
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">
+              Loading chart data...
+            </span>
+          </div>
+        ) : chartData.length === 0 ? (
           <div
             className="flex items-center justify-center rounded-lg"
             style={{ height, background: 'rgba(156, 163, 175, 0.05)' }}
@@ -247,4 +249,96 @@ export function PortfolioChart({ activities, currentValue, className }: Portfoli
       </CardContent>
     </Card>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Data mapping helpers
+// ---------------------------------------------------------------------------
+
+function mapSnapshotsToChartData(
+  snapshots: { timestamp: number; totalValue: number }[],
+  currentValue: number,
+): AreaData<Time>[] {
+  if (snapshots.length === 0) return [];
+
+  const sorted = [...snapshots].sort((a, b) => a.timestamp - b.timestamp);
+  const seenTimes = new Set<number>();
+  const points: AreaData<Time>[] = [];
+
+  for (const snap of sorted) {
+    const time = Math.floor(snap.timestamp);
+    if (seenTimes.has(time)) continue;
+    seenTimes.add(time);
+    points.push({
+      time: time as Time,
+      value: Math.max(snap.totalValue, 0),
+    });
+  }
+
+  // Append current value as the latest point
+  const now = Math.floor(Date.now() / 1000);
+  if (!seenTimes.has(now)) {
+    points.push({
+      time: now as Time,
+      value: Math.max(currentValue, 0),
+    });
+  }
+
+  return points;
+}
+
+function buildCumulativeChartData(
+  activities: Activity[],
+  currentValue: number,
+): AreaData<Time>[] {
+  const trades = activities
+    .filter((a) => a.type === 'trade' && a.value != null && a.timestamp)
+    .map((a) => ({
+      time: Math.floor(new Date(a.timestamp).getTime() / 1000),
+      value: a.value!,
+      side: a.side,
+    }))
+    .sort((a, b) => a.time - b.time);
+
+  if (trades.length === 0) return [];
+
+  let cumulative = 0;
+  const points: AreaData<Time>[] = [];
+  const seenTimes = new Set<number>();
+
+  for (const trade of trades) {
+    if (trade.side === 'BUY') {
+      cumulative += trade.value;
+    } else if (trade.side === 'SELL') {
+      cumulative -= trade.value;
+    } else {
+      cumulative += trade.value;
+    }
+
+    if (seenTimes.has(trade.time)) {
+      const lastIdx = points.length - 1;
+      if (lastIdx >= 0) {
+        points[lastIdx] = {
+          time: trade.time as Time,
+          value: Math.max(cumulative, 0),
+        };
+      }
+    } else {
+      seenTimes.add(trade.time);
+      points.push({
+        time: trade.time as Time,
+        value: Math.max(cumulative, 0),
+      });
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (!seenTimes.has(now)) {
+    points.push({
+      time: now as Time,
+      value: Math.max(currentValue, 0),
+    });
+  }
+
+  return points;
 }

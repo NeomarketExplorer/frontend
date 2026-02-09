@@ -145,6 +145,7 @@ function PortfolioContent({
       {/* Portfolio Value Chart */}
       {!activityLoading && (
         <PortfolioChart
+          address={address}
           activities={activity ?? []}
           currentValue={portfolio?.totalValue ?? 0}
         />

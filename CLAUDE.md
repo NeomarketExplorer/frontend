@@ -349,12 +349,23 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Open orders tab on market page (with cancel buttons)
 - Order cancellation via CLOB DELETE /order/{id}
 - Orderbook/trades error + empty state feedback (resolved/illiquid markets show "No orderbook data")
+- Error boundaries (`error.tsx` at app root and per-route)
+- Balance auto-refresh (30s polling + immediate invalidation after trades/approvals)
+- Transaction confirmation UI (status banner: submitting → confirmed, auto-clear after 5s)
+- Mobile optimization (responsive charts, touch-friendly trade panel, collapsible sections)
+- Dynamic metadata (`generateMetadata()` on market, event, events, markets pages)
+- Open Graph + Twitter Cards (per-page OG images, descriptions, Twitter card meta)
+- Sitemap + robots.txt (dynamic `sitemap.ts` from indexer, `robots.ts`)
+- Custom not-found page (terminal-aesthetic 404 with glass-card)
+- Resolved/closed positions tab in portfolio (entry price, resolution price, realized P&L)
+- P&L breakdown (cost basis, current value, unrealized gain/loss per position)
+- Portfolio value chart (Lightweight Charts AreaSeries, cumulative from trade activity)
+- Price flash animations (green/red flash on orderbook + midpoint price changes)
+- Skeleton loading screens (homepage cards, orderbook, trades, orders, chart, portfolio)
 
 ## What's Not Working Yet
 
-- Transaction status/confirmation UI (pending → confirmed → filled)
-- No Gnosis Safe deployment for gasless trading
-- No error boundaries or error.tsx pages
+- (Nothing critical — all core trading flows work)
 
 ---
 
@@ -379,12 +390,12 @@ This is the critical path. Nothing else matters if users can't trade.
 | 5.5 | ~~Wire up order submission~~ | **DONE** — `usePlaceOrder` with L2 + builder headers |
 | 5.6 | ~~USDC balance + allowance~~ | **DONE** — CLOB balance-allowance + on-chain fallback |
 | 5.7 | ~~Token approval flow~~ | **DONE** — Single "Enable Trading" button batches USDC + CTF + neg-risk approvals |
-| 5.8 | Gnosis Safe deployment (defer) | Deferred — EOA trading works, users pay own Polygon gas (fractions of a cent). |
+| 5.8 | ~~Gnosis Safe deployment~~ | **DROPPED** — Not needed. EOA trading works, Polygon gas is fractions of a cent. |
 
 **Env vars already set in Coolify:** `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
 
 **Known issues in current code to fix:**
-- No error boundaries or error.tsx pages.
+- (All resolved)
 
 ---
 
@@ -397,9 +408,9 @@ This is the critical path. Nothing else matters if users can't trade.
 | 6.1 | ~~Toast notification system~~ | **DONE** — using `toast()` from ui package. Toasts for: order placed, order failed, cancel success/failure, approval confirmed. |
 | 6.2 | ~~Open orders display~~ | **DONE** — Orders tab on market page shows open orders with side, price, size, filled, time. Uses `useOpenOrders()` hook. |
 | 6.3 | ~~Order cancellation~~ | **DONE** — Cancel button per order in Orders tab. Calls `useCancelOrder` → `DELETE /order/{id}` with L2 auth. Toast on success/failure. |
-| 6.4 | Error boundaries | Add `error.tsx` at app root and per-route. React Error Boundary wrapper component. User-friendly messages for common errors (network, auth, insufficient balance). |
-| 6.5 | Transaction confirmation UI | Show pending state while order submits. Animate transition: submitting → confirmed → filled. Auto-refresh positions after fill. |
-| 6.6 | Balance auto-refresh | Re-fetch USDC balance after trades, approvals, and on 30s interval. Show balance in trade panel and header. |
+| 6.4 | ~~Error boundaries~~ | **DONE** — `error.tsx` at app root and per-route with terminal-aesthetic error UI |
+| 6.5 | ~~Transaction confirmation UI~~ | **DONE** — Status banner (submitting → confirmed) with 5s auto-clear, auto-refresh positions |
+| 6.6 | ~~Balance auto-refresh~~ | **DONE** — 30s polling + immediate invalidation after trades/approvals, optimistic UI updates |
 
 ---
 
@@ -409,11 +420,11 @@ This is the critical path. Nothing else matters if users can't trade.
 
 | # | Task | Details |
 |---|------|---------|
-| 7.1 | Resolved positions tab | Query Data API for positions in resolved markets. Show outcome, payout amount, claim status. |
+| 7.1 | ~~Resolved positions tab~~ | **DONE** — Open/Resolved sub-tabs, resolved positions with entry price, resolution price, Won/Lost badge |
 | 7.2 | Position redemption | Call CTF contract `redeemPositions()` for resolved winning positions. Show "Claim" button with estimated payout. Toast on success. |
-| 7.3 | Closed positions history | Tab showing past positions: entry/exit price, realized P&L, market outcome. |
-| 7.4 | P&L breakdown | Per-market P&L detail view. Show cost basis, current value, unrealized gain/loss. |
-| 7.5 | Portfolio value chart | Historical portfolio value over time. Use same Lightweight Charts library. Intervals: 1d, 1w, 1m, all. |
+| 7.3 | ~~Closed positions history~~ | **DONE** — Merged into resolved tab with realized P&L, market outcome |
+| 7.4 | ~~P&L breakdown~~ | **DONE** — Cost basis, current value, unrealized gain/loss per position in open positions table |
+| 7.5 | ~~Portfolio value chart~~ | **DONE** — `portfolio-chart.tsx` using Lightweight Charts AreaSeries, cumulative from trade activity |
 
 ---
 
@@ -424,10 +435,10 @@ This is the critical path. Nothing else matters if users can't trade.
 | # | Task | Details |
 |---|------|---------|
 | 8.1 | ~~Rebrand to Neomarket~~ | **DONE** — All metadata, titles, components use "Neomarket". OG tags set. |
-| 8.2 | Dynamic page metadata | `generateMetadata()` in each page route. Market pages show market question as title. Event pages show event name. |
-| 8.3 | Open Graph + Twitter Cards | OG image, title, description per page. Twitter card meta tags. Use market images for social previews. |
-| 8.4 | Sitemap + robots.txt | Dynamic `sitemap.ts` generating URLs from indexer events/markets. `robots.ts` allowing crawlers. |
-| 8.5 | Custom not-found page | `not-found.tsx` with Neomarket branding and navigation back to home. |
+| 8.2 | ~~Dynamic page metadata~~ | **DONE** — `generateMetadata()` on market/event/events/markets pages with truncated descriptions |
+| 8.3 | ~~Open Graph + Twitter Cards~~ | **DONE** — Per-page OG type/url/images, Twitter cards with market images |
+| 8.4 | ~~Sitemap + robots.txt~~ | **DONE** — Dynamic `sitemap.ts` from indexer events/markets, `robots.ts` |
+| 8.5 | ~~Custom not-found page~~ | **DONE** — Terminal-aesthetic 404 with glass-card, colored dots, animated prompt |
 | 8.6 | Structured data | JSON-LD for events (Schema.org Event type). Helps search engines understand market content. |
 
 ---
@@ -438,11 +449,11 @@ This is the critical path. Nothing else matters if users can't trade.
 
 | # | Task | Details |
 |---|------|---------|
-| 9.1 | Price flash animations | When WebSocket delivers price updates, flash green (up) or red (down) on market cards and price displays. |
+| 9.1 | ~~Price flash animations~~ | **DONE** — Green/red flash on orderbook rows + midpoint text glow via CSS animations + React key re-trigger |
 | 9.2 | Live orderbook depth | Visual depth chart alongside the orderbook. Real-time updates via existing WebSocket subscription. |
-| 9.3 | Mobile optimization | Responsive chart sizing. Bottom sheet for mobile filters. Touch-friendly trade panel. Test all flows on mobile viewport. |
+| 9.3 | ~~Mobile optimization~~ | **DONE** — Responsive charts, touch-friendly trade panel, collapsible sections, mobile search |
 | 9.4 | New user onboarding | First-time flow: connect wallet → show balance → guide to first trade. Dismissable, not blocking. |
-| 9.5 | Loading/error polish | Audit all pages for missing loading states. Add skeleton screens where needed. Consistent error messages. |
+| 9.5 | ~~Loading/error polish~~ | **DONE** — Skeleton screens for homepage cards, orderbook, trades, orders, chart, portfolio tabs |
 | 9.6 | Modal/dialog component | Build reusable dialog (Radix Dialog). Use for: order confirmation, approval prompt, position details, settings. |
 
 ---
@@ -482,7 +493,7 @@ and can be parallelized or reordered.
 
 ### Current State
 
-- **NavSearch** (`nav-search.tsx`): Header dropdown, searches events only via `getEvents()`, 6 results max, 200ms debounce, keyboard nav (arrows + enter + escape). **Hidden on mobile.**
+- **NavSearch** (`nav-search.tsx`): Header dropdown, searches events only via `getEvents()`, 6 results max, 200ms debounce, keyboard nav (arrows + enter + escape). Works on mobile (responsive).
 - **EventSearch** (`event-search.tsx`): Full-width on `/events` page, events only, 8 results max, shows volume + liquidity. Works on mobile.
 - **searchMarkets()** in `lib/indexer.ts`: Exists, calls `/markets/search?q=`, but **nothing in the UI uses it**.
 - **Markets page**: No search at all.
@@ -491,7 +502,7 @@ and can be parallelized or reordered.
 
 1. No market search — users can only find events, not individual markets
 2. No combined search — can't search events and markets in one place
-3. Nav search hidden on mobile — mobile users must navigate to `/events` to search
+3. ~~Nav search hidden on mobile~~ — **FIXED** (mobile optimization pass)
 4. Results show no prices or outcome odds
 5. Always sorted by volume — no relevance ranking
 6. No Cmd+K / global keyboard shortcut
