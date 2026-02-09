@@ -184,12 +184,14 @@ export async function getStats(): Promise<IndexerStats> {
 
 /**
  * Detects placeholder/test markets that should be hidden from the UI.
- * A market is considered a placeholder if:
- * - It's not active AND not closed (i.e. never activated by Polymarket), OR
- * - It has no outcome prices AND zero volume (no trading activity at all)
+ * A market is considered a placeholder if it has no outcome prices AND zero
+ * volume (i.e. never had any trading activity).
+ *
+ * Note: we intentionally do NOT filter on `active` — the indexer sometimes
+ * marks live markets as active=false while they are still trading on
+ * Polymarket. Markets with volume or prices are never placeholders.
  */
 export function isPlaceholderMarket(market: IndexerMarket): boolean {
-  if (!market.active && !market.closed) return true;
   if ((!market.outcomePrices || market.outcomePrices.length === 0) && market.volume === 0) return true;
   return false;
 }
