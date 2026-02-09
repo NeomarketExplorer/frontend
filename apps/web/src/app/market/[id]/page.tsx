@@ -219,9 +219,11 @@ export default function MarketPage({ params }: MarketPageProps) {
   const tokenId = mappedTokenIds[orderForm.outcomeIndex] ?? null;
   const { data: orderbook, isLoading: orderbookLoading, isError: orderbookError } = useOrderbook(tokenId);
   const { data: trades, isLoading: tradesLoading, isError: tradesError } = useTrades(tokenId);
+  // Use outcomeTokenIds directly (available from market data, no CLOB wait)
+  const chartTokenId = outcomeTokenIds[orderForm.outcomeIndex] ?? null;
   const { data: candleData, isLoading: candlesLoading } = useMarketCandles(
     market?.conditionId,
-    null,
+    chartTokenId,
     chartInterval,
   );
 
