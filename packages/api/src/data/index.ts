@@ -36,6 +36,43 @@ export const ActivitySchema = z.object({
   transaction_hash: z.string().optional(),
 }).passthrough();
 
+// ---------------------------------------------------------------------------
+// Normalize helpers — Polymarket Data API returns camelCase, we use snake_case
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function normalizePosition(raw: any): any {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  return {
+    ...raw,
+    condition_id: raw.conditionId ?? raw.condition_id,
+    outcome_index: raw.outcomeIndex ?? raw.outcome_index,
+    avg_price: raw.avgPrice ?? raw.avg_price,
+    cur_price: raw.curPrice ?? raw.cur_price,
+    initial_value: raw.initialValue ?? raw.initial_value,
+    current_value: raw.currentValue ?? raw.current_value,
+    pnl: raw.cashPnl ?? raw.pnl,
+    pnl_percent: raw.percentPnl ?? raw.pnl_percent,
+    realized_pnl: raw.realizedPnl ?? raw.realized_pnl,
+    unrealized_pnl: raw.unrealizedPnl ?? raw.unrealized_pnl,
+  };
+}
+
+function normalizeActivity(raw: any): any {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  return {
+    ...raw,
+    type: typeof raw.type === 'string' ? raw.type.toLowerCase() : raw.type,
+    condition_id: raw.conditionId ?? raw.condition_id,
+    timestamp: typeof raw.timestamp === 'number'
+      ? new Date(raw.timestamp * 1000).toISOString()
+      : raw.timestamp,
+    value: raw.usdcSize ?? raw.value,
+    transaction_hash: raw.transactionHash ?? raw.transaction_hash,
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const UserBalanceSchema = z.object({
   usdc: z.number(),
   conditional_tokens: z.record(z.number()),
@@ -71,11 +108,12 @@ export class DataClient {
    * Get user positions
    */
   async getPositions(user: string, sizeThreshold = 0): Promise<Position[]> {
-    return this.client.get(
+    const raw = await this.client.get<unknown[]>(
       '/positions',
       { params: { user, sizeThreshold } },
-      z.array(PositionSchema)
     );
+    const normalized = (Array.isArray(raw) ? raw : []).map(normalizePosition);
+    return z.array(PositionSchema).parse(normalized);
   }
 
   /**
@@ -85,11 +123,12 @@ export class DataClient {
     user: string,
     options: Partial<Omit<ActivityParams, 'user'>> = {}
   ): Promise<Activity[]> {
-    return this.client.get(
+    const raw = await this.client.get<unknown[]>(
       '/activity',
       { params: { user, ...options } },
-      z.array(ActivitySchema)
     );
+    const normalized = (Array.isArray(raw) ? raw : []).map(normalizeActivity);
+    return z.array(ActivitySchema).parse(normalized);
   }
 
   /**
