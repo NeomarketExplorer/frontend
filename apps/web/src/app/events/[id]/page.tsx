@@ -6,6 +6,11 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 // ---------------------------------------------------------------------------
 // CLOB market status fetching (server-side, with concurrency limit + cache)
 // ---------------------------------------------------------------------------
@@ -211,6 +216,13 @@ export default async function EventPage({
     .map((c) => c.market)
     .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
 
+  // Derive event expiry from the latest market endDateIso
+  const eventEndDate = visibleMarkets
+    .map((m) => m.endDateIso)
+    .filter(Boolean)
+    .sort()
+    .pop() ?? null;
+
   return (
     <div className="space-y-6 sm:space-y-8">
       <EventJsonLd event={event} />
@@ -281,8 +293,12 @@ export default async function EventPage({
 
               <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <StatItem label="Volume" value={formatVolume(event.volume)} color="cyan" />
+                <StatItem label="24h Vol" value={formatVolume(event.volume24hr)} color="cyan" />
                 <StatItem label="Liquidity" value={formatVolume(event.liquidity)} color="green" />
                 <StatItem label="Live" value={String(liveMarkets.length)} color="pink" />
+                {eventEndDate && (
+                  <StatItem label="Ends" value={formatDate(eventEndDate)} color="pink" />
+                )}
               </div>
             </div>
           </div>
@@ -389,14 +405,26 @@ function MarketCard({ market, index }: { market: IndexerMarket; index: number })
           <h3 className="text-sm font-medium group-hover:text-[var(--accent)] transition-colors mb-2">
             {market.question}
           </h3>
-          <span className="font-mono text-xs text-[var(--foreground-muted)]">
-            {formatVolume(market.volume)}
-          </span>
-          {!isBinary && (
-            <span className="ml-2 font-mono text-[0.55rem] text-[var(--foreground-muted)] uppercase tracking-wider">
-              Multi-outcome
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">
+              {formatVolume(market.volume)} vol
             </span>
-          )}
+            {market.volume24hr > 0 && (
+              <span className="font-mono text-xs text-[var(--foreground-muted)]">
+                {formatVolume(market.volume24hr)} 24h
+              </span>
+            )}
+            {market.endDateIso && (
+              <span className="font-mono text-xs text-[var(--foreground-muted)]">
+                Ends {formatDate(market.endDateIso)}
+              </span>
+            )}
+            {!isBinary && (
+              <span className="font-mono text-[0.55rem] text-[var(--foreground-muted)] uppercase tracking-wider">
+                Multi-outcome
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex gap-2">
