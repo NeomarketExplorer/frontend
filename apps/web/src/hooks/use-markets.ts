@@ -43,6 +43,8 @@ export function useMarket(id: string | null) {
     queryKey: marketKeys.detail(id ?? ''),
     queryFn: () => (id ? getMarket(id) : null),
     enabled: !!id,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 
