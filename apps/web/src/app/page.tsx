@@ -2,19 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getStats, formatVolume, type IndexerStats } from '@/lib/indexer';
+import { getStats, getCategories, formatVolume, type IndexerStats, type IndexerCategory } from '@/lib/indexer';
 import { HomeEvents } from '@/components/home-events';
 
 export const dynamic = 'force-dynamic';
 
 type StatsData = IndexerStats['data'];
 
-function toSlug(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
-
 export default function HomePage() {
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [categories, setCategories] = useState<IndexerCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -22,12 +19,16 @@ export default function HomePage() {
     let mounted = true;
     const load = async () => {
       try {
-        const result = await getStats();
+        const [statsResult, categoriesResult] = await Promise.allSettled([
+          getStats(),
+          getCategories(),
+        ]);
         if (mounted) {
-          setStats(result.data);
+          if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
+          if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
         }
       } catch (error) {
-        console.error('Failed to load stats', error);
+        console.error('Failed to load homepage data', error);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -87,9 +88,12 @@ export default function HomePage() {
             <div className="w-1 h-5 bg-gradient-to-b from-[var(--accent)] to-[var(--danger)] rounded-full" />
             <h2 className="text-lg sm:text-xl font-bold tracking-tight">Top Categories</h2>
           </div>
-          <div className="font-mono text-xs text-[var(--foreground-muted)]">
-            // Live market tags
-          </div>
+          <Link
+            href="/categories"
+            className="font-mono text-xs text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors"
+          >
+            View All -&gt;
+          </Link>
         </div>
 
         {loading ? (
@@ -98,7 +102,7 @@ export default function HomePage() {
               <div key={i} className="h-10 w-24 bg-[var(--card-solid)] animate-pulse rounded shrink-0" />
             ))}
           </div>
-        ) : stats?.categories?.length ? (
+        ) : categories.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setSelectedCategory(null)}
@@ -108,26 +112,25 @@ export default function HomePage() {
             >
               All
             </button>
-            {stats.categories.map((category) => (
+            {categories.map((category) => (
               <Link
-                key={category.name}
-                href={`/categories/${toSlug(category.name)}`}
+                key={category.slug}
+                href={`/categories/${category.slug}`}
                 onClick={(e) => {
                   e.preventDefault();
                   setSelectedCategory(
-                    selectedCategory === category.name ? null : category.name
+                    selectedCategory === category.slug ? null : category.slug
                   );
                 }}
-                onContextMenu={undefined}
                 className={`tag cursor-pointer transition-colors shrink-0 ${
-                  selectedCategory === category.name
+                  selectedCategory === category.slug
                     ? 'bg-[var(--accent)] text-[var(--background)]'
                     : 'hover:border-[var(--accent)]'
                 }`}
               >
-                {category.name}
-                <span className={`ml-2 ${selectedCategory === category.name ? 'opacity-70' : 'text-[var(--secondary)]'}`}>
-                  {formatVolume(category.volume)}
+                {category.label}
+                <span className={`ml-2 ${selectedCategory === category.slug ? 'opacity-70' : 'text-[var(--secondary)]'}`}>
+                  {category.count.toLocaleString()}
                 </span>
               </Link>
             ))}

@@ -295,6 +295,21 @@ export default async function EventPage({
                     In Review
                   </span>
                 )}
+                {event.categories && event.categories.length > 0 && (
+                  event.categories.map((cat) => {
+                    const label = cat.includes('/') ? cat.split('/').pop()! : cat;
+                    const displayLabel = label.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                    return (
+                      <Link
+                        key={cat}
+                        href={`/categories/${cat}`}
+                        className="tag hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        {displayLabel}
+                      </Link>
+                    );
+                  })
+                )}
               </div>
 
               <h1 className="text-xl sm:text-2xl font-bold mb-4">{event.title}</h1>

@@ -237,8 +237,11 @@ Already deployed on Coolify. Push to main and redeploy from Coolify dashboard.
 | apps/web/src/hooks/use-orders.ts | Order placement hook (usePlaceOrder, useOpenOrders) |
 | apps/web/src/hooks/use-enable-trading.ts | Batched USDC + CTF approval flow (single "Enable Trading" button) |
 | apps/web/src/stores/wallet-store.ts | Zustand wallet state (balance, connection) |
-| apps/web/src/app/market/[id]/page.tsx | Market page with chart + TradePanel |
-| apps/web/src/app/events/[id]/page.tsx | Event detail with price bars |
+| apps/web/src/app/market/[id]/page.tsx | Market page with candlestick chart + TradePanel |
+| apps/web/src/app/events/[id]/page.tsx | Event detail with CLOB-verified status grouping |
+| apps/web/src/components/candle-chart.tsx | Candlestick + volume chart (Lightweight Charts) |
+| apps/web/src/lib/clickhouse.ts | ClickHouse API client (candles, trades, stats) |
+| apps/web/src/hooks/use-clickhouse.ts | ClickHouse React Query hooks |
 | apps/web/src/components/home-events.tsx | Homepage trending events |
 | apps/web/src/app/globals.css | Full design system (CSS variables) |
 | apps/web/Dockerfile | Standalone Next.js (NEXT_PUBLIC_PRIVY_APP_ID as build arg) |
@@ -329,7 +332,7 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 
 - Events/markets/portfolio/profile pages
 - Interactive header search (NavSearch) with dropdown
-- Market page with chart (Lightweight Charts), orderbook, trade panel
+- Market page with candlestick chart (Lightweight Charts CandlestickSeries + volume HistogramSeries from ClickHouse), orderbook, trade panel
 - Homepage with stats, trending events, infinite scroll
 - Privy wallet auth (embedded + external wallets, graceful degradation without app ID)
 - wagmi integration for on-chain reads (`usePublicClient`); contract writes use Privy wallet provider + viem
@@ -362,10 +365,15 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Portfolio value chart (Lightweight Charts AreaSeries, cumulative from trade activity)
 - Price flash animations (green/red flash on orderbook + midpoint price changes)
 - Skeleton loading screens (homepage cards, orderbook, trades, orders, chart, portfolio)
+- Candlestick chart (OHLCV from ClickHouse `/market/candles`, replaces old area chart)
+- Event page: CLOB-verified market status grouping (Live / In Review / Resolved)
+- Event page: all-time volume, 24h volume, expiry date on header and market cards
+- Market page: `useMarket` auto-refreshes every 60s (prices stay current)
 
 ## What's Not Working Yet
 
-- (Nothing critical — all core trading flows work)
+- ClickHouse `/market/candles` endpoint is slow (~6s) — needs materialized views (see CANDLE_PERF_FIX.md)
+- Indexer `active` flag unreliable — 42K+ markets stuck as active=false (see INDEXER_ACTIVE_FLAG_FIX.md), frontend works around it via CLOB verification
 
 ---
 
