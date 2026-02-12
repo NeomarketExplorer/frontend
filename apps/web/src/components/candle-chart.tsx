@@ -21,6 +21,7 @@ interface CandleChartProps {
   className?: string;
   title?: string;
   height?: number;
+  fillContainer?: boolean;
 }
 
 function formatCompactVolume(vol: number): string {
@@ -35,13 +36,14 @@ export function CandleChart({
   className,
   title = 'Price',
   height = 300,
+  fillContainer = false,
 }: CandleChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  // Transform candle data for the chart (prices 0-1 → cents)
+  // Transform candle data for the chart (prices 0-1 -> cents)
   const { candleData, volumeData } = useMemo(() => {
     if (!candles || candles.length === 0) return { candleData: [], volumeData: [] };
 
@@ -85,14 +87,18 @@ export function CandleChart({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const chart = createChart(chartContainerRef.current, {
+    const container = chartContainerRef.current;
+    const initialWidth = container.clientWidth;
+    const initialHeight = fillContainer ? container.clientHeight : height;
+
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: 'rgb(156, 163, 175)',
         fontFamily: 'var(--font-mono)',
       },
-      width: chartContainerRef.current.clientWidth,
-      height,
+      width: initialWidth,
+      height: initialHeight,
       grid: {
         vertLines: { color: 'rgba(156, 163, 175, 0.1)' },
         horzLines: { color: 'rgba(156, 163, 175, 0.1)' },
@@ -158,19 +164,25 @@ export function CandleChart({
       chart.timeScale().fitContent();
     }
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+    // Use ResizeObserver for both fillContainer and normal modes
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height: h } = entry.contentRect;
+        if (width > 0) {
+          chart.applyOptions({
+            width,
+            ...(fillContainer ? { height: h } : {}),
+          });
+        }
       }
-    };
-
-    window.addEventListener('resize', handleResize);
+    });
+    ro.observe(container);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      ro.disconnect();
       chart.remove();
     };
-  }, [candleData, volumeData, height]);
+  }, [candleData, volumeData, height, fillContainer]);
 
   // Update data when it changes
   useEffect(() => {
@@ -188,6 +200,26 @@ export function CandleChart({
   const currentPrice =
     candleData.length > 0 ? candleData[candleData.length - 1].close : null;
 
+  // fillContainer mode: no Card wrapper, just the chart div filling parent
+  if (fillContainer) {
+    if (isLoading) {
+      return (
+        <div className={cn('w-full h-full flex items-center justify-center', className)}>
+          <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    }
+    if (candleData.length === 0) {
+      return (
+        <div className={cn('w-full h-full flex items-center justify-center', className)}>
+          <span className="text-muted-foreground text-sm">No price data available</span>
+        </div>
+      );
+    }
+    return <div ref={chartContainerRef} className={cn('w-full h-full', className)} />;
+  }
+
+  // Normal Card-wrapped mode
   return (
     <Card className={cn(className)}>
       <CardHeader className="pb-2">

@@ -956,3 +956,18 @@ body {
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
 }
+
+/* ========================================================================== */
+/* Resizable panel handles (react-resizable-panels v4) */
+/* ========================================================================== */
+
+[data-separator] {
+  background: var(--card-border);
+  transition: background 0.15s ease;
+  flex: 0 0 3px !important;
+}
+
+[data-separator]:hover,
+[data-separator][aria-grabbed="true"] {
+  background: var(--accent);
+}

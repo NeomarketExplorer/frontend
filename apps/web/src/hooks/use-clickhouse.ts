@@ -61,10 +61,10 @@ export function useLeaderboard(sort?: string, period?: string) {
   });
 }
 
-export function useOnChainTrades(tokenId?: string | null) {
+export function useOnChainTrades(tokenId?: string | null, limit?: number) {
   return useQuery<OnChainTrade[]>({
-    queryKey: ['ch-trades', tokenId],
-    queryFn: () => getOnChainTrades(tokenId!),
+    queryKey: ['ch-trades', tokenId, limit],
+    queryFn: () => getOnChainTrades(tokenId!, limit),
     enabled: !!tokenId,
     staleTime: 30_000,
     refetchInterval: 60_000,
