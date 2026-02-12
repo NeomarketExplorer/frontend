@@ -223,6 +223,10 @@ export default async function EventPage({
     .sort()
     .pop() ?? null;
 
+  // Derive event status from classified markets (indexer event flags are unreliable)
+  const isEventResolved = liveMarkets.length === 0 && inReviewMarkets.length === 0 && closedMarkets.length > 0;
+  const isEventLive = liveMarkets.length > 0;
+
   return (
     <div className="space-y-6 sm:space-y-8">
       <EventJsonLd event={event} />
@@ -264,7 +268,7 @@ export default async function EventPage({
 
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-2 mb-3">
-                {event.closed ? (
+                {isEventResolved ? (
                   <span className="tag tag-danger">
                     <svg
                       viewBox="0 0 24 24"
@@ -278,13 +282,17 @@ export default async function EventPage({
                     </svg>
                     Resolved
                   </span>
-                ) : (
+                ) : isEventLive ? (
                   <span className="tag tag-success">
                     <span className="relative flex h-1 w-1 mr-1">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-1 w-1 bg-[var(--success)]"></span>
                     </span>
                     Live
+                  </span>
+                ) : (
+                  <span className="tag" style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>
+                    In Review
                   </span>
                 )}
               </div>
@@ -295,61 +303,58 @@ export default async function EventPage({
                 <StatItem label="Volume" value={formatVolume(event.volume)} color="cyan" />
                 <StatItem label="24h Vol" value={formatVolume(event.volume24hr)} color="cyan" />
                 <StatItem label="Liquidity" value={formatVolume(event.liquidity)} color="green" />
-                <StatItem label="Live" value={String(liveMarkets.length)} color="pink" />
+                {liveMarkets.length > 0 ? (
+                  <StatItem label="Live" value={String(liveMarkets.length)} color="green" />
+                ) : (
+                  <div>
+                    <p className="font-mono text-[0.6rem] text-[var(--foreground-muted)] uppercase tracking-wider mb-0.5">
+                      Live
+                    </p>
+                    <p className="font-mono font-bold text-sm text-[var(--danger)]">
+                      0 live markets
+                    </p>
+                  </div>
+                )}
                 {eventEndDate && (
                   <StatItem label="Ends" value={formatDate(eventEndDate)} color="pink" />
                 )}
               </div>
             </div>
           </div>
+
+          {/* About Event — collapsible */}
+          {event.description && (
+            <details className="mt-5 pt-4 border-t border-[var(--card-border)]">
+              <summary className="flex items-center gap-2 cursor-pointer select-none font-mono text-xs font-semibold uppercase tracking-wider text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <span className="w-1 h-4 bg-[var(--accent)] rounded-full" />
+                About_Event
+                <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 ml-auto transition-transform [[open]>&]:rotate-180" stroke="currentColor" strokeWidth="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </summary>
+              <p className="mt-3 text-sm text-[var(--foreground-muted)] whitespace-pre-wrap leading-relaxed">
+                {event.description}
+              </p>
+            </details>
+          )}
         </div>
       </div>
 
-      {event.description && (
-        <div className="glass-card p-4 sm:p-5">
-          <h2 className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-3">
-            <span className="w-1 h-4 bg-[var(--accent)] rounded-full" />
-            About_Event
-          </h2>
-          <p className="text-sm text-[var(--foreground-muted)] whitespace-pre-wrap leading-relaxed">
-            {event.description}
-          </p>
-        </div>
-      )}
-
       {/* Live Markets */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--accent)] rounded-full" />
-          <h2 className="text-lg sm:text-xl font-bold">Live</h2>
-          <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
-        </div>
-
-        {liveMarkets.length > 0 ? (
+      {liveMarkets.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--accent)] rounded-full" />
+            <h2 className="text-lg sm:text-xl font-bold">Live</h2>
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
+          </div>
           <div className="space-y-3">
             {liveMarkets.map((market, index) => (
               <MarketCard key={market.id} market={market} index={index} />
             ))}
           </div>
-        ) : (
-          <div className="glass-card p-10 text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="w-7 h-7 text-[var(--foreground-muted)]"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="12" y1="20" x2="12" y2="10" />
-                <line x1="18" y1="20" x2="18" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="16" />
-              </svg>
-            </div>
-            <p className="font-mono text-sm text-[var(--foreground-muted)]">No live markets</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* In Review Markets */}
       {inReviewMarkets.length > 0 && (
