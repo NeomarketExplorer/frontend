@@ -17,7 +17,8 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
 async function fetchEvents(
   offset: number,
   limit: number,
-  sort: SortField
+  sort: SortField,
+  category?: string | null
 ): Promise<{ data: IndexerEvent[]; hasMore: boolean }> {
   const result = await getEvents({
     limit,
@@ -26,6 +27,7 @@ async function fetchEvents(
     closed: false,
     sort,
     order: 'desc',
+    ...(category ? { category } : {}),
   });
 
   return {
@@ -34,7 +36,7 @@ async function fetchEvents(
   };
 }
 
-export function HomeEvents() {
+export function HomeEvents({ category }: { category?: string | null }) {
   const [sort, setSort] = useState<SortField>('volume_24hr');
   const [items, setItems] = useState<IndexerEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +49,7 @@ export function HomeEvents() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const loadMore = useCallback(
-    async (currentSort: SortField, currentOffset: number, append: boolean) => {
+    async (currentSort: SortField, currentOffset: number, append: boolean, currentCategory?: string | null) => {
       if (loadingRef.current) return;
 
       loadingRef.current = true;
@@ -55,7 +57,7 @@ export function HomeEvents() {
       setError(null);
 
       try {
-        const result = await fetchEvents(currentOffset, 12, currentSort);
+        const result = await fetchEvents(currentOffset, 12, currentSort, currentCategory);
 
         if (append) {
           setItems((prev) => [...prev, ...result.data]);
@@ -79,8 +81,8 @@ export function HomeEvents() {
     offsetRef.current = 0;
     setItems([]);
     setHasMore(true);
-    loadMore(sort, 0, false);
-  }, [sort, loadMore]);
+    loadMore(sort, 0, false, category);
+  }, [sort, category, loadMore]);
 
   useEffect(() => {
     if (observerRef.current) {
@@ -95,7 +97,7 @@ export function HomeEvents() {
           !loadingRef.current &&
           items.length > 0
         ) {
-          loadMore(sort, offsetRef.current, true);
+          loadMore(sort, offsetRef.current, true, category);
         }
       },
       { threshold: 0.1, rootMargin: '100px' }
@@ -110,7 +112,7 @@ export function HomeEvents() {
         observerRef.current.disconnect();
       }
     };
-  }, [hasMore, sort, items.length, loadMore]);
+  }, [hasMore, sort, category, items.length, loadMore]);
 
   const handleSortChange = (newSort: SortField) => {
     if (newSort !== sort) {

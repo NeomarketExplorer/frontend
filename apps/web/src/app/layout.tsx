@@ -5,7 +5,7 @@ import { PrivyProvider } from '@/providers/privy-provider';
 import { ClobAuthProvider } from '@/providers/clob-auth-provider';
 import { WagmiProvider } from '@/providers/wagmi-provider';
 import { ConnectButton } from '@/components/connect-button';
-import { NavSearch } from '@/components/nav-search';
+import { SearchBar } from '@/components/search-bar';
 import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({
@@ -106,13 +106,13 @@ export default function RootLayout({
                     <div className="hidden sm:flex items-center gap-0.5">
                       <NavLink href="/events" label="Events" />
                       <NavLink href="/markets" label="Markets" />
+                      <NavLink href="/categories" label="Categories" />
                       <NavLink href="/portfolio" label="Portfolio" />
                       <NavLink href="/leaderboard" label="Leaderboard" />
                     </div>
 
-                    {/* Search + Connect */}
+                    {/* Connect */}
                     <div className="flex items-center gap-3">
-                      <NavSearch />
                       <ConnectButton />
                     </div>
                   </div>
@@ -124,12 +124,18 @@ export default function RootLayout({
                 <div className="flex items-center justify-center gap-1 px-4 py-1.5 overflow-x-auto">
                   <NavLink href="/events" label="Events" />
                   <NavLink href="/markets" label="Markets" />
+                  <NavLink href="/categories" label="Categories" />
                   <NavLink href="/portfolio" label="Portfolio" />
                   <NavLink href="/leaderboard" label="Leaderboard" />
                 </div>
               </div>
 
-              <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+              {/* Search Bar */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 sm:pt-7">
+                <SearchBar />
+              </div>
+
+              <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-6 sm:pt-6 sm:pb-8">
                 {children}
               </main>
 

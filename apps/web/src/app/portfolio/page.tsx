@@ -376,9 +376,18 @@ function OpenPositionsTable({
                   style={{ animationDelay: `${i * 40}ms` }}
                 >
                   <td>
-                    <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
-                      {position.marketQuestion ?? `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`}
-                    </span>
+                    {position.marketQuestion ? (
+                      <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
+                        {position.marketQuestion}
+                      </span>
+                    ) : (
+                      <div>
+                        <span className="text-sm font-medium text-[var(--foreground-muted)]">Unknown Market</span>
+                        <span className="block font-mono text-[0.6rem] text-[var(--foreground-muted)] opacity-60">
+                          {position.condition_id.slice(0, 10)}...{position.condition_id.slice(-6)}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="text-center">
                     <span
@@ -483,9 +492,18 @@ function ResolvedPositionsTable({
                   style={{ animationDelay: `${i * 40}ms` }}
                 >
                   <td>
-                    <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
-                      {position.marketQuestion ?? `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`}
-                    </span>
+                    {position.marketQuestion ? (
+                      <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
+                        {position.marketQuestion}
+                      </span>
+                    ) : (
+                      <div>
+                        <span className="text-sm font-medium text-[var(--foreground-muted)]">Unknown Market</span>
+                        <span className="block font-mono text-[0.6rem] text-[var(--foreground-muted)] opacity-60">
+                          {position.condition_id.slice(0, 10)}...{position.condition_id.slice(-6)}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="text-center">
                     <span

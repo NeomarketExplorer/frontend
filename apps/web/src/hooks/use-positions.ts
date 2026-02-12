@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
+import { searchMarkets } from '@/lib/indexer';
 
 // Route through proxy to avoid CORS
 const dataClient = createDataClient({ baseUrl: '/api/data' });
@@ -91,6 +92,32 @@ async function enrichPositionsWithMarketData(
     }
   } catch {
     // Enrichment is best-effort — positions still show without names
+  }
+
+  // Secondary fallback: try indexer for any positions not enriched by Gamma
+  const unenrichedIds = conditionIds.filter((id) => !marketMap[id]);
+  if (unenrichedIds.length > 0) {
+    const lookups = unenrichedIds.map(async (conditionId) => {
+      try {
+        const results = await searchMarkets(conditionId, 1);
+        const match = results.find(
+          (m) => m.conditionId?.toLowerCase() === conditionId.toLowerCase()
+        );
+        if (match) {
+          marketMap[conditionId] = {
+            question: match.question,
+            id: String(match.id),
+            slug: match.slug ?? '',
+            outcomes: match.outcomes ?? ['Yes', 'No'],
+            closed: match.closed === true,
+            outcomePrices: match.outcomePrices ?? [],
+          };
+        }
+      } catch {
+        // Indexer lookup failed — continue
+      }
+    });
+    await Promise.allSettled(lookups);
   }
 
   return positions.map((p) => {

@@ -102,6 +102,7 @@ export async function getEvents(params?: {
   sort?: 'volume' | 'volume_24hr' | 'liquidity' | 'created_at';
   order?: 'asc' | 'desc';
   search?: string;
+  category?: string;
 }): Promise<PaginatedResponse<IndexerEvent>> {
   const searchParams = new URLSearchParams();
 
@@ -112,6 +113,7 @@ export async function getEvents(params?: {
   if (params?.sort) searchParams.set('sort', params.sort);
   if (params?.order) searchParams.set('order', params.order);
   if (params?.search) searchParams.set('search', params.search);
+  if (params?.category) searchParams.set('category', params.category);
 
   const query = searchParams.toString();
   return fetchIndexer<PaginatedResponse<IndexerEvent>>(`/events${query ? `?${query}` : ''}`);

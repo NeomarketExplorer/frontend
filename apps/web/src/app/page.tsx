@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getStats, formatVolume, type IndexerStats } from '@/lib/indexer';
 import { HomeEvents } from '@/components/home-events';
 
@@ -8,9 +9,14 @@ export const dynamic = 'force-dynamic';
 
 type StatsData = IndexerStats['data'];
 
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
 export default function HomePage() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -56,8 +62,8 @@ export default function HomePage() {
 
         {/* Stats */}
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="p-3 bg-[var(--card)] border border-[var(--card-border)]">
                 <div className="h-3 w-16 bg-[var(--card-solid)] animate-pulse rounded mb-2" />
                 <div className="h-5 w-20 bg-[var(--card-solid)] animate-pulse rounded" />
@@ -65,10 +71,9 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <StatCard label="Live_Events" value={(stats?.events.live ?? 0).toLocaleString()} accent="green" pulse />
             <StatCard label="Live_Markets" value={(stats?.markets.live ?? 0).toLocaleString()} accent="green" pulse />
-            <StatCard label="Total_Volume" value={formatVolume(stats?.volume.total ?? 0)} accent="pink" />
             <StatCard label="Volume_24h" value={formatVolume(stats?.volume.last24hr ?? 0)} accent="cyan" />
             <StatCard label="Liquidity" value={formatVolume(stats?.liquidity ?? 0)} accent="cyan" />
           </div>
@@ -95,11 +100,36 @@ export default function HomePage() {
           </div>
         ) : stats?.categories?.length ? (
           <div className="flex gap-2 overflow-x-auto pb-2">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`tag cursor-pointer transition-colors shrink-0 ${
+                selectedCategory === null ? 'bg-[var(--accent)] text-[var(--background)]' : 'hover:border-[var(--accent)]'
+              }`}
+            >
+              All
+            </button>
             {stats.categories.map((category) => (
-              <span key={category.name} className="tag">
+              <Link
+                key={category.name}
+                href={`/categories/${toSlug(category.name)}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setSelectedCategory(
+                    selectedCategory === category.name ? null : category.name
+                  );
+                }}
+                onContextMenu={undefined}
+                className={`tag cursor-pointer transition-colors shrink-0 ${
+                  selectedCategory === category.name
+                    ? 'bg-[var(--accent)] text-[var(--background)]'
+                    : 'hover:border-[var(--accent)]'
+                }`}
+              >
                 {category.name}
-                <span className="ml-2 text-[var(--secondary)]">{formatVolume(category.volume)}</span>
-              </span>
+                <span className={`ml-2 ${selectedCategory === category.name ? 'opacity-70' : 'text-[var(--secondary)]'}`}>
+                  {formatVolume(category.volume)}
+                </span>
+              </Link>
             ))}
           </div>
         ) : (
@@ -124,7 +154,7 @@ export default function HomePage() {
           </a>
         </div>
 
-        <HomeEvents />
+        <HomeEvents category={selectedCategory} />
       </section>
     </div>
   );
