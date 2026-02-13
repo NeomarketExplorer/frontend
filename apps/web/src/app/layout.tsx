@@ -5,7 +5,7 @@ import { PrivyProvider } from '@/providers/privy-provider';
 import { ClobAuthProvider } from '@/providers/clob-auth-provider';
 import { WagmiProvider } from '@/providers/wagmi-provider';
 import { ConnectButton } from '@/components/connect-button';
-import { LayoutShell } from '@/components/layout-shell';
+import { LayoutShell, NavWrapper, MobileNav } from '@/components/layout-shell';
 import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({
@@ -74,7 +74,7 @@ export default function RootLayout({
 
               {/* Navigation */}
               <nav className="sticky top-0 z-50 backdrop-blur-xl bg-[var(--background)]/90 border-b border-[var(--card-border)]">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                <NavWrapper>
                   <div className="flex items-center justify-between h-14 gap-4">
                     {/* Logo */}
                     <a href="/" className="flex items-center gap-2.5 group">
@@ -116,19 +116,17 @@ export default function RootLayout({
                       <ConnectButton />
                     </div>
                   </div>
-                </div>
+                </NavWrapper>
               </nav>
 
-              {/* Mobile Nav */}
-              <div className="sm:hidden sticky top-14 z-40 backdrop-blur-xl bg-[var(--background)]/90 border-b border-[var(--card-border)]">
-                <div className="flex items-center justify-center gap-1 px-4 py-1.5 overflow-x-auto">
-                  <NavLink href="/events" label="Events" />
-                  <NavLink href="/markets" label="Markets" />
-                  <NavLink href="/categories" label="Categories" />
-                  <NavLink href="/portfolio" label="Portfolio" />
-                  <NavLink href="/leaderboard" label="Leaderboard" />
-                </div>
-              </div>
+              {/* Mobile Nav (hidden on market terminal pages) */}
+              <MobileNav>
+                <NavLink href="/events" label="Events" />
+                <NavLink href="/markets" label="Markets" />
+                <NavLink href="/categories" label="Categories" />
+                <NavLink href="/portfolio" label="Portfolio" />
+                <NavLink href="/leaderboard" label="Leaderboard" />
+              </MobileNav>
 
               <LayoutShell>
                 {children}

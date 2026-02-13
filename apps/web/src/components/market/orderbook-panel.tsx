@@ -88,19 +88,21 @@ function useMidpointFlash(midpoint: number | null | undefined) {
 export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: OrderbookPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [levelCount, setLevelCount] = useState(12);
+  const [showTotal, setShowTotal] = useState(true);
   const { flashMap, flashId } = useOrderbookFlash(orderbook);
   const { flash: midFlash, flashMidId } = useMidpointFlash(midpoint);
 
-  // Dynamic level count based on panel height
+  // Dynamic level count + responsive total column
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const h = entry.contentRect.height;
-        // ~20px per row, minus ~80px for headers/midpoint
+        const w = entry.contentRect.width;
         const levels = Math.max(8, Math.floor((h - 80) / 20));
         setLevelCount(levels);
+        setShowTotal(w >= 280);
       }
     });
     ro.observe(el);
@@ -166,9 +168,10 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
       </div>
 
       {/* Header row */}
-      <div className="px-3 py-1 flex justify-between text-[0.6rem] font-mono text-muted-foreground uppercase tracking-wider">
-        <span>Price</span>
-        <span>Size</span>
+      <div className="px-3 py-1 flex text-[0.6rem] font-mono text-muted-foreground uppercase tracking-wider">
+        <span className="flex-1">Price</span>
+        <span className="flex-1 text-right">Size</span>
+        {showTotal && <span className="flex-1 text-right">Total</span>}
       </div>
 
       {/* Asks (reversed — lowest ask at bottom near midpoint) */}
@@ -180,14 +183,15 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
           return (
             <div
               key={`ask-${i}-${flash ? flashId : 'stable'}`}
-              className={`flex justify-between items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
+              className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
             >
               <div
                 className="absolute inset-y-0 right-0 bg-[var(--danger)]/8"
                 style={{ width: `${depthWidth}%` }}
               />
-              <span className="text-negative relative z-10">{level.price.toFixed(2)}</span>
-              <span className="text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+              <span className="flex-1 text-negative relative z-10">{level.price.toFixed(2)}</span>
+              <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+              {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
             </div>
           );
         })}
@@ -214,14 +218,15 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
           return (
             <div
               key={`bid-${i}-${flash ? flashId : 'stable'}`}
-              className={`flex justify-between items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
+              className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
             >
               <div
                 className="absolute inset-y-0 right-0 bg-[var(--success)]/8"
                 style={{ width: `${depthWidth}%` }}
               />
-              <span className="text-positive relative z-10">{level.price.toFixed(2)}</span>
-              <span className="text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+              <span className="flex-1 text-positive relative z-10">{level.price.toFixed(2)}</span>
+              <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+              {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
             </div>
           );
         })}
