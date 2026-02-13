@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getEvent, formatVolume, isPlaceholderMarket, type IndexerMarket } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
+import { shouldUseCompactTable, extractShortNames } from '@/lib/question-parser';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -201,20 +202,33 @@ export default async function EventPage({
     status: classifyMarket(m, clobStatuses.get(m.conditionId)),
   }));
 
-  const liveMarkets = classified
-    .filter((c) => c.status === 'live')
-    .map((c) => c.market)
-    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+  // Decide compact table vs card layout
+  const useCompact = shouldUseCompactTable(visibleMarkets);
+  const shortNamesList = useCompact
+    ? extractShortNames(visibleMarkets.map((m) => m.question))
+    : null;
+  const shortNames = new Map<string, string>();
+  if (shortNamesList) {
+    visibleMarkets.forEach((m, i) => shortNames.set(m.id, shortNamesList[i]));
+  }
 
-  const inReviewMarkets = classified
-    .filter((c) => c.status === 'in_review')
-    .map((c) => c.market)
-    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+  // Sort helper: compact mode sorts by YES probability desc, otherwise by 24h volume
+  const sortMarkets = (arr: IndexerMarket[]) =>
+    useCompact
+      ? arr.sort((a, b) => (getYesPrice(b) ?? 0) - (getYesPrice(a) ?? 0))
+      : arr.sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
 
-  const closedMarkets = classified
-    .filter((c) => c.status === 'closed')
-    .map((c) => c.market)
-    .sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
+  const liveMarkets = sortMarkets(
+    classified.filter((c) => c.status === 'live').map((c) => c.market),
+  );
+
+  const inReviewMarkets = sortMarkets(
+    classified.filter((c) => c.status === 'in_review').map((c) => c.market),
+  );
+
+  const closedMarkets = sortMarkets(
+    classified.filter((c) => c.status === 'closed').map((c) => c.market),
+  );
 
   // Derive event expiry from the latest market endDateIso
   const eventEndDate = visibleMarkets
@@ -363,11 +377,15 @@ export default async function EventPage({
             <h2 className="text-lg sm:text-xl font-bold">Live</h2>
             <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
           </div>
-          <div className="space-y-3">
-            {liveMarkets.map((market, index) => (
-              <MarketCard key={market.id} market={market} index={index} />
-            ))}
-          </div>
+          {useCompact ? (
+            <CompactMarketTable markets={liveMarkets} shortNames={shortNames} startRank={1} />
+          ) : (
+            <div className="space-y-3">
+              {liveMarkets.map((market, index) => (
+                <MarketCard key={market.id} market={market} index={index} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -380,10 +398,20 @@ export default async function EventPage({
             <span className="font-mono text-xs text-[var(--foreground-muted)]">({inReviewMarkets.length})</span>
           </div>
 
-          <div className="space-y-3 opacity-85">
-            {inReviewMarkets.map((market, index) => (
-              <MarketCard key={market.id} market={market} index={index} />
-            ))}
+          <div className="opacity-85">
+            {useCompact ? (
+              <CompactMarketTable
+                markets={inReviewMarkets}
+                shortNames={shortNames}
+                startRank={liveMarkets.length + 1}
+              />
+            ) : (
+              <div className="space-y-3">
+                {inReviewMarkets.map((market, index) => (
+                  <MarketCard key={market.id} market={market} index={index} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -397,13 +425,120 @@ export default async function EventPage({
             <span className="font-mono text-xs text-[var(--foreground-muted)]">({closedMarkets.length})</span>
           </div>
 
-          <div className="space-y-3 opacity-75">
-            {closedMarkets.map((market, index) => (
-              <MarketCard key={market.id} market={market} index={index} />
-            ))}
+          <div className="opacity-75">
+            {useCompact ? (
+              <CompactMarketTable
+                markets={closedMarkets}
+                shortNames={shortNames}
+                startRank={liveMarkets.length + inReviewMarkets.length + 1}
+              />
+            ) : (
+              <div className="space-y-3">
+                {closedMarkets.map((market, index) => (
+                  <MarketCard key={market.id} market={market} index={index} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function getYesPrice(market: IndexerMarket): number | null {
+  if (!market.outcomes || !market.outcomePrices) return null;
+  const idx = market.outcomes.findIndex((o) => isYesOutcome(o));
+  if (idx === -1) return null;
+  const raw = market.outcomePrices[idx];
+  const price = typeof raw === 'string' ? parseFloat(raw) : raw;
+  return Number.isFinite(price) ? price : null;
+}
+
+function CompactMarketTable({
+  markets,
+  shortNames,
+  startRank,
+}: {
+  markets: IndexerMarket[];
+  shortNames: Map<string, string>;
+  startRank: number;
+}) {
+  return (
+    <div className="glass-card overflow-hidden">
+      {/* Header */}
+      <div className="hidden sm:flex items-center gap-2 px-4 py-2 border-b border-[var(--card-border)] text-[0.6rem] font-mono uppercase tracking-wider text-[var(--foreground-muted)]">
+        <span className="w-8 text-center">#</span>
+        <span className="flex-1 ml-2">Name</span>
+        <span className="w-40 text-right">Probability</span>
+        <span className="w-20 text-right hidden lg:block">Volume</span>
+      </div>
+
+      {/* Rows */}
+      {markets.map((market, i) => {
+        const rank = startRank + i;
+        const name = shortNames.get(market.id) ?? market.question;
+        const yesPrice = getYesPrice(market);
+        const pct = yesPrice != null ? yesPrice * 100 : null;
+
+        return (
+          <Link
+            key={market.id}
+            href={`/market/${market.id}`}
+            className="group flex items-center gap-2 px-4 py-1.5 sm:py-1 hover:bg-[var(--card-hover)] transition-colors border-b border-[var(--card-border)] last:border-b-0"
+          >
+            {/* Rank */}
+            <span className="w-8 text-center font-mono text-xs text-[var(--foreground-muted)] shrink-0">
+              {rank}
+            </span>
+
+            {/* Name + bar (mobile: stacked, desktop: inline) */}
+            <div className="flex-1 ml-2 min-w-0">
+              <span className="text-sm truncate block group-hover:text-[var(--accent)] transition-colors">
+                {name}
+              </span>
+              {/* Mobile-only bar below name */}
+              <div className="sm:hidden mt-1 price-bar" style={{ height: '3px' }}>
+                <div
+                  className="price-bar-fill"
+                  style={{
+                    width: `${pct ?? 0}%`,
+                    background: 'linear-gradient(to right, var(--success), var(--success)/66)',
+                    height: '3px',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Probability bar + percentage (desktop) */}
+            <div className="hidden sm:flex items-center gap-2 w-40 shrink-0 justify-end">
+              <div className="price-bar flex-1" style={{ height: '3px' }}>
+                <div
+                  className="price-bar-fill"
+                  style={{
+                    width: `${pct ?? 0}%`,
+                    background: 'linear-gradient(to right, var(--success), var(--success)/66)',
+                    height: '3px',
+                  }}
+                />
+              </div>
+              <span className="font-mono text-xs font-bold w-12 text-right text-[var(--success)]">
+                {pct != null ? `${pct.toFixed(1)}%` : 'N/A'}
+              </span>
+            </div>
+
+            {/* Mobile percentage */}
+            <span className="sm:hidden font-mono text-xs font-bold text-[var(--success)] shrink-0">
+              {pct != null ? `${pct.toFixed(1)}%` : 'N/A'}
+            </span>
+
+            {/* Volume (lg only) */}
+            <span className="hidden lg:block w-20 text-right font-mono text-xs text-[var(--foreground-muted)] shrink-0">
+              {formatVolume(market.volume)}
+            </span>
+          </Link>
+        );
+      })}
     </div>
   );
 }

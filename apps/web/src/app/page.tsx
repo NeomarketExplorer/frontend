@@ -25,7 +25,11 @@ export default function HomePage() {
         ]);
         if (mounted) {
           if (statsResult.status === 'fulfilled') setStats(statsResult.value.data);
-          if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
+          if (categoriesResult.status === 'fulfilled') {
+            setCategories(
+              [...categoriesResult.value].sort((a, b) => b.count - a.count)
+            );
+          }
         }
       } catch (error) {
         console.error('Failed to load homepage data', error);
