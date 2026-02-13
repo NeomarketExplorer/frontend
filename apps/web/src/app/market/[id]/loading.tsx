@@ -17,12 +17,12 @@ export default function Loading() {
       </div>
 
       {/* Body — 2 column layout */}
-      <div className="flex-1 flex">
-        {/* Left: Chart (~65%) */}
-        <div className="flex-[65] bg-muted/20 animate-pulse" />
+      <div className="flex-1 flex min-h-0">
+        {/* Left: Chart */}
+        <div className="flex-1 min-w-0 bg-muted/20 animate-pulse" />
 
-        {/* Right column (~35%) */}
-        <div className="flex-[35] border-l border-[var(--card-border)] flex flex-col">
+        {/* Right column */}
+        <div className="hidden lg:flex w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex-col">
           {/* Orderbook skeleton */}
           <div className="flex-[45] p-3 space-y-1.5 border-b border-[var(--card-border)]">
             <div className="h-4 w-20 bg-muted animate-pulse rounded mb-3" />
@@ -62,7 +62,7 @@ export default function Loading() {
       </div>
 
       {/* Bottom tabs skeleton */}
-      <div className="h-[25%] border-t border-[var(--card-border)] p-3 space-y-2">
+      <div className="h-[200px] shrink-0 border-t border-[var(--card-border)] p-3 space-y-2">
         <div className="flex gap-2">
           <div className="h-6 w-16 bg-muted animate-pulse rounded" />
           <div className="h-6 w-16 bg-muted animate-pulse rounded" />

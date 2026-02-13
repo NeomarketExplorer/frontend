@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
+import { useMemo, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@app/ui';
 import {
   useMarket,
@@ -103,26 +102,6 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
     );
   }
 
-  const sharedProps = {
-    outcomes,
-    tokenId,
-    mappedTokenIds,
-    negRisk: clobMarket?.neg_risk ?? false,
-    clobMarketLoaded: !clobMarketLoading && !!clobMarket,
-    acceptingOrders: clobMarket?.accepting_orders ?? true,
-    conditionId: market?.conditionId ?? null,
-    candleData,
-    candlesLoading,
-    orderbook: orderbook ?? null,
-    selectedMidpoint: selectedMidpoint ?? null,
-    orderbookLoading,
-    orderbookError,
-    chartInterval,
-    onIntervalChange: setChartInterval,
-    market,
-    marketStats: marketStats ?? null,
-  };
-
   return (
     <>
       {/* Desktop terminal layout (lg+) */}
@@ -138,212 +117,132 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
           chartInterval={chartInterval}
           onIntervalChange={setChartInterval}
         />
-        <DesktopPanels {...sharedProps} />
+
+        {/* Main area: chart (left) + orderbook/trade (right) */}
+        <div className="flex-1 flex min-h-0">
+          {/* Chart — fills remaining width */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            <CandleChart
+              candles={candleData?.candles ?? []}
+              isLoading={candlesLoading}
+              fillContainer
+            />
+          </div>
+
+          {/* Right column — fixed width */}
+          <div className="w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex flex-col min-h-0">
+            {/* Orderbook */}
+            <div className="flex-[45] min-h-0 overflow-hidden">
+              <OrderbookPanel
+                orderbook={orderbook ?? null}
+                midpoint={selectedMidpoint ?? null}
+                isLoading={orderbookLoading}
+                isError={orderbookError}
+              />
+            </div>
+            {/* Trade panel */}
+            <div className="flex-[55] min-h-0 overflow-y-auto border-t border-[var(--card-border)]">
+              <TradePanel
+                outcomes={outcomes}
+                tokenId={tokenId}
+                mappedTokenIds={mappedTokenIds}
+                negRisk={clobMarket?.neg_risk ?? false}
+                clobMarketLoaded={!clobMarketLoading && !!clobMarket}
+                acceptingOrders={clobMarket?.accepting_orders ?? true}
+                conditionId={market?.conditionId ?? null}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom tabs — full-width, fixed height */}
+        <div className="h-[200px] shrink-0 border-t border-[var(--card-border)]">
+          <BottomTabs
+            tokenId={tokenId}
+            conditionId={market?.conditionId ?? null}
+            outcomes={outcomes}
+          />
+        </div>
       </div>
 
       {/* Mobile layout (below lg) */}
       <div className="lg:hidden h-[calc(100vh-56px)] flex flex-col">
-        <MobileTerminal {...sharedProps} />
-      </div>
-    </>
-  );
-}
+        {/* Compact mobile header */}
+        <div className="px-3 py-2 border-b border-[var(--card-border)] bg-[var(--background-secondary)]/50 shrink-0">
+          <div className="flex items-start gap-3">
+            {market.image && (
+              <img src={market.image} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base font-bold leading-tight line-clamp-2">{market.question}</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="text-lg font-bold font-mono">
+              {selectedMidpoint != null ? `${(selectedMidpoint * 100).toFixed(1)}c` : '--'}
+            </span>
+            <div className="flex items-center gap-0.5">
+              {(['1h', '4h', '1d', '1w'] as const).map((interval) => (
+                <button
+                  key={interval}
+                  onClick={() => setChartInterval(interval)}
+                  className={`text-[0.6rem] font-mono px-1.5 py-0.5 rounded transition-colors ${
+                    chartInterval === interval
+                      ? 'bg-[var(--accent)] text-[var(--background)]'
+                      : 'text-muted-foreground hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  {interval.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
-/* ============================================================================
- * Desktop: 2-column layout with resizable panels
- * ============================================================================ */
-
-interface PanelProps {
-  outcomes: ReturnType<typeof buildOutcomeEntries>;
-  tokenId: string | null;
-  mappedTokenIds: string[];
-  negRisk: boolean;
-  clobMarketLoaded: boolean;
-  acceptingOrders: boolean;
-  conditionId: string | null;
-  candleData: { candles: import('@/lib/clickhouse').Candle[] } | null | undefined;
-  candlesLoading: boolean;
-  orderbook: { bids: { price: number; size: number }[]; asks: { price: number; size: number }[] } | null;
-  selectedMidpoint: number | null;
-  orderbookLoading: boolean;
-  orderbookError: boolean;
-  chartInterval: TimeInterval;
-  onIntervalChange: (interval: TimeInterval) => void;
-  market: NonNullable<ReturnType<typeof useMarket>['data']>;
-  marketStats: import('@/lib/clickhouse').MarketStats | null;
-}
-
-function useClientStorage() {
-  const [storage, setStorage] = useState<Storage | undefined>(undefined);
-  useEffect(() => { setStorage(localStorage); }, []);
-  return storage;
-}
-
-function DesktopPanels(props: PanelProps) {
-  const storage = useClientStorage();
-  const outerLayout = useDefaultLayout({ id: 'market-outer-v2', storage });
-  const mainLayout = useDefaultLayout({ id: 'market-main-h2', storage });
-  const rightLayout = useDefaultLayout({ id: 'market-right-v2', storage });
-
-  return (
-    <Group
-      orientation="vertical"
-      defaultLayout={outerLayout.defaultLayout}
-      onLayoutChanged={outerLayout.onLayoutChanged}
-      className="flex-1"
-    >
-      {/* Main area: chart (left) + orderbook/trade (right) */}
-      <Panel id="main" defaultSize={75} minSize={50}>
-        <Group
-          orientation="horizontal"
-          defaultLayout={mainLayout.defaultLayout}
-          onLayoutChanged={mainLayout.onLayoutChanged}
-        >
-          {/* Chart */}
-          <Panel id="chart" defaultSize={65} minSize={40} className="overflow-hidden">
-            <div className="h-full w-full overflow-hidden">
+        {/* Tabbed content */}
+        <Tabs defaultValue="chart" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="px-3 py-1 border-b border-[var(--card-border)] shrink-0 h-auto justify-start bg-transparent">
+            <TabsTrigger value="chart" className="text-xs">Chart</TabsTrigger>
+            <TabsTrigger value="trade" className="text-xs">Trade</TabsTrigger>
+            <TabsTrigger value="book" className="text-xs">Book</TabsTrigger>
+          </TabsList>
+          <TabsContent value="chart" className="flex-1 min-h-0 flex flex-col mt-0 data-[state=inactive]:hidden">
+            <div className="flex-1 min-h-0">
               <CandleChart
-                candles={props.candleData?.candles ?? []}
-                isLoading={props.candlesLoading}
+                candles={candleData?.candles ?? []}
+                isLoading={candlesLoading}
                 fillContainer
               />
             </div>
-          </Panel>
-          <Separator />
-
-          {/* Right column: orderbook (top) + trade panel (bottom) */}
-          <Panel id="right" defaultSize={35} minSize={22} maxSize={55} className="overflow-hidden">
-            <Group
-              orientation="vertical"
-              defaultLayout={rightLayout.defaultLayout}
-              onLayoutChanged={rightLayout.onLayoutChanged}
-            >
-              <Panel id="orderbook" defaultSize={45} minSize={20} className="overflow-hidden">
-                <div className="h-full border-l border-[var(--card-border)] bg-[var(--card)]/50 overflow-hidden">
-                  <OrderbookPanel
-                    orderbook={props.orderbook}
-                    midpoint={props.selectedMidpoint}
-                    isLoading={props.orderbookLoading}
-                    isError={props.orderbookError}
-                  />
-                </div>
-              </Panel>
-              <Separator />
-              <Panel id="trade" defaultSize={55} minSize={30} className="overflow-hidden">
-                <div className="h-full border-l border-t border-[var(--card-border)] bg-[var(--card)]/50 overflow-hidden">
-                  <TradePanel
-                    outcomes={props.outcomes}
-                    tokenId={props.tokenId}
-                    mappedTokenIds={props.mappedTokenIds}
-                    negRisk={props.negRisk}
-                    clobMarketLoaded={props.clobMarketLoaded}
-                    acceptingOrders={props.acceptingOrders}
-                    conditionId={props.conditionId}
-                  />
-                </div>
-              </Panel>
-            </Group>
-          </Panel>
-        </Group>
-      </Panel>
-      <Separator />
-
-      {/* Bottom: full-width tabs */}
-      <Panel id="bottom" defaultSize={25} minSize={10} maxSize={45} className="overflow-hidden">
-        <div className="h-full border-t border-[var(--card-border)] bg-[var(--card)]/30 overflow-hidden">
-          <BottomTabs
-            tokenId={props.tokenId}
-            conditionId={props.conditionId}
-            outcomes={props.outcomes}
-          />
-        </div>
-      </Panel>
-    </Group>
-  );
-}
-
-/* ============================================================================
- * Mobile: tabbed interface
- * ============================================================================ */
-
-function MobileTerminal(props: PanelProps) {
-  return (
-    <>
-      {/* Compact mobile header */}
-      <div className="px-3 py-2 border-b border-[var(--card-border)] bg-[var(--background-secondary)]/50">
-        <div className="flex items-start gap-3">
-          {props.market.image && (
-            <img src={props.market.image} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold leading-tight line-clamp-2">{props.market.question}</h1>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-lg font-bold font-mono">
-            {props.selectedMidpoint != null ? `${(props.selectedMidpoint * 100).toFixed(1)}c` : '--'}
-          </span>
-          <div className="flex items-center gap-0.5">
-            {(['1h', '4h', '1d', '1w'] as const).map((interval) => (
-              <button
-                key={interval}
-                onClick={() => props.onIntervalChange(interval)}
-                className={`text-[0.6rem] font-mono px-1.5 py-0.5 rounded transition-colors ${
-                  props.chartInterval === interval
-                    ? 'bg-[var(--accent)] text-[var(--background)]'
-                    : 'text-muted-foreground hover:text-[var(--foreground)]'
-                }`}
-              >
-                {interval.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
+            <div className="h-[200px] border-t border-[var(--card-border)] shrink-0">
+              <BottomTabs
+                tokenId={tokenId}
+                conditionId={market?.conditionId ?? null}
+                outcomes={outcomes}
+              />
+            </div>
+          </TabsContent>
+          <TabsContent value="trade" className="flex-1 overflow-auto mt-0 data-[state=inactive]:hidden">
+            <TradePanel
+              outcomes={outcomes}
+              tokenId={tokenId}
+              mappedTokenIds={mappedTokenIds}
+              negRisk={clobMarket?.neg_risk ?? false}
+              clobMarketLoaded={!clobMarketLoading && !!clobMarket}
+              acceptingOrders={clobMarket?.accepting_orders ?? true}
+              conditionId={market?.conditionId ?? null}
+            />
+          </TabsContent>
+          <TabsContent value="book" className="flex-1 min-h-0 mt-0 data-[state=inactive]:hidden">
+            <OrderbookPanel
+              orderbook={orderbook ?? null}
+              midpoint={selectedMidpoint ?? null}
+              isLoading={orderbookLoading}
+              isError={orderbookError}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      {/* Tabbed content */}
-      <Tabs defaultValue="chart" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="px-3 py-1 border-b border-[var(--card-border)] shrink-0 h-auto justify-start bg-transparent">
-          <TabsTrigger value="chart" className="text-xs">Chart</TabsTrigger>
-          <TabsTrigger value="trade" className="text-xs">Trade</TabsTrigger>
-          <TabsTrigger value="book" className="text-xs">Book</TabsTrigger>
-        </TabsList>
-        <TabsContent value="chart" className="flex-1 min-h-0 flex flex-col mt-0 data-[state=inactive]:hidden">
-          <div className="flex-1 min-h-0">
-            <CandleChart
-              candles={props.candleData?.candles ?? []}
-              isLoading={props.candlesLoading}
-              fillContainer
-            />
-          </div>
-          <div className="h-[200px] border-t border-[var(--card-border)] shrink-0">
-            <BottomTabs
-              tokenId={props.tokenId}
-              conditionId={props.conditionId}
-              outcomes={props.outcomes}
-            />
-          </div>
-        </TabsContent>
-        <TabsContent value="trade" className="flex-1 overflow-auto mt-0 data-[state=inactive]:hidden">
-          <TradePanel
-            outcomes={props.outcomes}
-            tokenId={props.tokenId}
-            mappedTokenIds={props.mappedTokenIds}
-            negRisk={props.negRisk}
-            clobMarketLoaded={props.clobMarketLoaded}
-            acceptingOrders={props.acceptingOrders}
-            conditionId={props.conditionId}
-          />
-        </TabsContent>
-        <TabsContent value="book" className="flex-1 min-h-0 mt-0 data-[state=inactive]:hidden">
-          <OrderbookPanel
-            orderbook={props.orderbook}
-            midpoint={props.selectedMidpoint}
-            isLoading={props.orderbookLoading}
-            isError={props.orderbookError}
-          />
-        </TabsContent>
-      </Tabs>
     </>
   );
 }
@@ -370,13 +269,13 @@ function TerminalSkeleton() {
         </div>
       </div>
 
-      {/* Body skeleton - 2 column layout */}
-      <div className="flex-1 flex">
-        {/* Left: Chart area (~65%) */}
-        <div className="flex-[65] bg-muted/20 animate-pulse" />
+      {/* Body skeleton — 2 column layout */}
+      <div className="flex-1 flex min-h-0">
+        {/* Chart area */}
+        <div className="flex-1 min-w-0 bg-muted/20 animate-pulse" />
 
-        {/* Right column (~35%) */}
-        <div className="flex-[35] border-l border-[var(--card-border)] flex flex-col">
+        {/* Right column */}
+        <div className="w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex flex-col">
           {/* Orderbook skeleton */}
           <div className="flex-[45] p-3 space-y-1.5 border-b border-[var(--card-border)]">
             <div className="h-4 w-20 bg-muted animate-pulse rounded mb-3" />
@@ -415,7 +314,7 @@ function TerminalSkeleton() {
       </div>
 
       {/* Bottom tabs skeleton */}
-      <div className="h-[25%] border-t border-[var(--card-border)] p-3 space-y-2">
+      <div className="h-[200px] shrink-0 border-t border-[var(--card-border)] p-3 space-y-2">
         <div className="flex gap-2">
           <div className="h-6 w-16 bg-muted animate-pulse rounded" />
           <div className="h-6 w-16 bg-muted animate-pulse rounded" />
