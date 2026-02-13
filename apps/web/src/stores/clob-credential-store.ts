@@ -1,26 +1,26 @@
 /**
  * CLOB credential store
  * Stores per-user L2 credentials for authenticated CLOB requests.
- * Persisted in sessionStorage keyed by wallet address (cleared on tab close, survives refresh).
- * NOT localStorage — credentials don't persist across sessions.
+ * Persisted in localStorage keyed by wallet address so credentials survive
+ * across browser sessions — no re-derivation popup on return visits.
  */
 
 import { create } from 'zustand';
 import type { L2Credentials } from '@app/trading';
 
-const SESSION_PREFIX = 'clob-creds:';
+const STORAGE_PREFIX = 'clob-creds:';
 
-function sessionKey(address: string | null): string | null {
+function storageKey(address: string | null): string | null {
   if (!address) return null;
-  return `${SESSION_PREFIX}${address.toLowerCase()}`;
+  return `${STORAGE_PREFIX}${address.toLowerCase()}`;
 }
 
-function loadFromSession(address: string | null): L2Credentials | null {
+function loadFromStorage(address: string | null): L2Credentials | null {
   if (typeof window === 'undefined') return null;
-  const key = sessionKey(address);
+  const key = storageKey(address);
   if (!key) return null;
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed.apiKey && parsed.secret && parsed.passphrase) return parsed;
@@ -30,18 +30,18 @@ function loadFromSession(address: string | null): L2Credentials | null {
   }
 }
 
-function saveToSession(address: string | null, credentials: L2Credentials | null) {
+function saveToStorage(address: string | null, credentials: L2Credentials | null) {
   if (typeof window === 'undefined') return;
-  const key = sessionKey(address);
+  const key = storageKey(address);
   if (!key) return;
   try {
     if (credentials) {
-      sessionStorage.setItem(key, JSON.stringify(credentials));
+      localStorage.setItem(key, JSON.stringify(credentials));
     } else {
-      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
     }
   } catch {
-    // sessionStorage may be unavailable in some contexts
+    // localStorage may be unavailable in some contexts
   }
 }
 
@@ -66,7 +66,7 @@ export const useClobCredentialStore = create<ClobCredentialState>((set) => ({
   derivationError: null,
 
   setCredentials: (credentials, address) => {
-    saveToSession(address, credentials);
+    saveToStorage(address, credentials);
     set({
       credentials,
       credentialAddress: address.toLowerCase(),
@@ -80,7 +80,7 @@ export const useClobCredentialStore = create<ClobCredentialState>((set) => ({
     set({ derivationError: error, isDerivingCredentials: false }),
   clearCredentials: () => {
     const { credentialAddress } = useClobCredentialStore.getState();
-    saveToSession(credentialAddress, null);
+    saveToStorage(credentialAddress, null);
     set({
       credentials: null,
       credentialAddress: null,
@@ -89,7 +89,7 @@ export const useClobCredentialStore = create<ClobCredentialState>((set) => ({
     });
   },
   loadForAddress: (address) => {
-    const loaded = loadFromSession(address);
+    const loaded = loadFromStorage(address);
     set({
       credentials: loaded,
       credentialAddress: address?.toLowerCase() ?? null,

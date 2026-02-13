@@ -10,7 +10,6 @@ interface WalletState {
   isConnected: boolean;
   isConnecting: boolean;
   address: string | null;
-  softDisconnected: boolean;
 
   // Balance
   usdcBalance: number;
@@ -21,8 +20,6 @@ interface WalletState {
   setConnecting: (connecting: boolean) => void;
   setBalance: (balance: number) => void;
   setLoadingBalance: (loading: boolean) => void;
-  softDisconnect: () => void;
-  resume: () => void;
   disconnect: () => void;
 }
 
@@ -31,7 +28,6 @@ export const useWalletStore = create<WalletState>((set) => ({
   isConnected: false,
   isConnecting: false,
   address: null,
-  softDisconnected: false,
 
   // Balance
   usdcBalance: 0,
@@ -39,24 +35,15 @@ export const useWalletStore = create<WalletState>((set) => ({
 
   // Actions
   setConnected: (connected, address = null) =>
-    set({ isConnected: connected, address, isConnecting: false, softDisconnected: false }),
+    set({ isConnected: connected, address, isConnecting: false }),
   setConnecting: (connecting) => set({ isConnecting: connecting }),
   setBalance: (balance) => set({ usdcBalance: balance }),
   setLoadingBalance: (loading) => set({ isLoadingBalance: loading }),
-  softDisconnect: () =>
-    set({
-      isConnected: false,
-      isConnecting: false,
-      address: null,
-      softDisconnected: true,
-    }),
-  resume: () => set({ softDisconnected: false }),
   disconnect: () =>
     set({
       isConnected: false,
       isConnecting: false,
       address: null,
       usdcBalance: 0,
-      softDisconnected: false,
     }),
 }));

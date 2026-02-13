@@ -29,7 +29,7 @@ export function ConnectButton() {
 
 function ConnectButtonInner() {
   const { isReady, isAuthenticated, login, logout } = useAuth();
-  const { address, isConnecting, softDisconnected, softDisconnect, resume } = useWalletStore();
+  const { address, isConnecting } = useWalletStore();
   const { balance } = useUsdcBalance();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -109,20 +109,10 @@ function ConnectButtonInner() {
               {copied ? 'Copied' : 'Copy address'}
             </button>
             <button
-              className="w-full text-left px-2 py-1.5 rounded hover:bg-[var(--accent)]/10 transition-colors"
+              className="w-full text-left px-2 py-1.5 rounded text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
               onClick={async () => {
                 setMenuOpen(false);
                 await logout();
-                login();
-              }}
-            >
-              Switch account
-            </button>
-            <button
-              className="w-full text-left px-2 py-1.5 rounded text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
-              onClick={() => {
-                setMenuOpen(false);
-                softDisconnect();
               }}
             >
               Disconnect
@@ -130,19 +120,6 @@ function ConnectButtonInner() {
           </div>
         )}
       </div>
-    );
-  }
-
-  if (isAuthenticated && softDisconnected) {
-    return (
-      <Button
-        size="sm"
-        onClick={() => {
-          resume();
-        }}
-      >
-        Reconnect
-      </Button>
     );
   }
 

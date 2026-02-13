@@ -49,54 +49,51 @@ export function CandleChart({
 
     const sorted = [...candles].sort((a, b) => a.time - b.time);
 
-    // The API currently rounds prices, so many candles become doji (open == close),
-    // and our default color logic (close >= open => green) makes charts look "all green".
-    //
-    // Frontend workaround: when open == close, use the previous candle's close as the
-    // effective open for display + coloring (common charting practice).
-    const dojiEps = 1e-12;
+    // The API currently rounds prices, so many candles become doji (open == close).
+    // If we color strictly by (close >= open), dojis skew green and charts look wrong.
+    // Workaround: color dojis by previous close; if still tied, keep the previous color.
+    const eps = 1e-12;
     const up = 'rgb(34, 197, 94)';
     const down = 'rgb(239, 68, 68)';
     const upVol = 'rgba(34, 197, 94, 0.35)';
     const downVol = 'rgba(239, 68, 68, 0.35)';
 
-    const cd: CandlestickData<Time>[] = sorted.map((c, i) => {
+    const cd: CandlestickData<Time>[] = [];
+    const vd: HistogramData<Time>[] = [];
+    let prevIsUp: boolean | null = null;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted[i];
       const prevClose = i > 0 ? sorted[i - 1].close : undefined;
-      const isDoji = Math.abs(c.close - c.open) <= dojiEps;
-      const effectiveOpen = isDoji && prevClose !== undefined ? prevClose : c.open;
-      const isUp = c.close >= effectiveOpen;
 
-      // Keep OHLC consistent for the chart renderer if effectiveOpen is outside [low, high].
-      const effectiveHigh = Math.max(c.high, effectiveOpen, c.close);
-      const effectiveLow = Math.min(c.low, effectiveOpen, c.close);
+      let isUp: boolean;
+      if (Math.abs(c.close - c.open) > eps) {
+        isUp = c.close > c.open;
+      } else if (prevClose !== undefined && Math.abs(c.close - prevClose) > eps) {
+        isUp = c.close > prevClose;
+      } else {
+        isUp = prevIsUp ?? true;
+      }
+      prevIsUp = isUp;
 
-      return {
+      const pointColor = isUp ? up : down;
+      cd.push({
         time: c.time as Time,
-        open: effectiveOpen * 100,
-        high: effectiveHigh * 100,
-        low: effectiveLow * 100,
+        open: c.open * 100,
+        high: c.high * 100,
+        low: c.low * 100,
         close: c.close * 100,
-        ...(isDoji
-          ? {
-              color: isUp ? up : down,
-              borderColor: isUp ? up : down,
-              wickColor: isUp ? up : down,
-            }
-          : {}),
-      };
-    });
+        color: pointColor,
+        borderColor: pointColor,
+        wickColor: pointColor,
+      });
 
-    const vd: HistogramData<Time>[] = sorted.map((c, i) => {
-      const prevClose = i > 0 ? sorted[i - 1].close : undefined;
-      const isDoji = Math.abs(c.close - c.open) <= dojiEps;
-      const effectiveOpen = isDoji && prevClose !== undefined ? prevClose : c.open;
-      const isUp = c.close >= effectiveOpen;
-      return {
+      vd.push({
         time: c.time as Time,
         value: c.volume,
         color: isUp ? upVol : downVol,
-      };
-    });
+      });
+    }
 
     return { candleData: cd, volumeData: vd };
   }, [candles]);
