@@ -118,30 +118,32 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
           onIntervalChange={setChartInterval}
         />
 
-        {/* Main area: chart (left) + orderbook/trade (right) */}
+        {/* 2-column layout spanning full height */}
         <div className="flex-1 flex min-h-0">
-          {/* Chart — fills remaining width */}
-          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
-            <CandleChart
-              candles={candleData?.candles ?? []}
-              isLoading={candlesLoading}
-              fillContainer
-            />
-          </div>
-
-          {/* Right column — fixed width */}
-          <div className="w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex flex-col min-h-0">
-            {/* Orderbook */}
-            <div className="flex-[45] min-h-0 overflow-hidden">
-              <OrderbookPanel
-                orderbook={orderbook ?? null}
-                midpoint={selectedMidpoint ?? null}
-                isLoading={orderbookLoading}
-                isError={orderbookError}
+          {/* Left column: Chart + Bottom Tabs */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            {/* Chart — fills remaining height */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <CandleChart
+                candles={candleData?.candles ?? []}
+                isLoading={candlesLoading}
+                fillContainer
               />
             </div>
-            {/* Trade panel */}
-            <div className="flex-[55] min-h-0 overflow-y-auto border-t border-[var(--card-border)]">
+            {/* Bottom tabs */}
+            <div className="h-[220px] shrink-0 border-t border-[var(--card-border)]">
+              <BottomTabs
+                tokenId={tokenId}
+                conditionId={market?.conditionId ?? null}
+                outcomes={outcomes}
+              />
+            </div>
+          </div>
+
+          {/* Right column: Trade + Orderbook */}
+          <div className="w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex flex-col min-h-0">
+            {/* Trade panel — auto height, no scroll */}
+            <div className="shrink-0">
               <TradePanel
                 outcomes={outcomes}
                 tokenId={tokenId}
@@ -152,16 +154,16 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
                 conditionId={market?.conditionId ?? null}
               />
             </div>
+            {/* Orderbook — fills remaining height */}
+            <div className="flex-1 min-h-0 overflow-hidden border-t border-[var(--card-border)]">
+              <OrderbookPanel
+                orderbook={orderbook ?? null}
+                midpoint={selectedMidpoint ?? null}
+                isLoading={orderbookLoading}
+                isError={orderbookError}
+              />
+            </div>
           </div>
-        </div>
-
-        {/* Bottom tabs — full-width, fixed height */}
-        <div className="h-[200px] shrink-0 border-t border-[var(--card-border)]">
-          <BottomTabs
-            tokenId={tokenId}
-            conditionId={market?.conditionId ?? null}
-            outcomes={outcomes}
-          />
         </div>
       </div>
 
@@ -204,7 +206,7 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
           <TabsList className="px-3 py-1 border-b border-[var(--card-border)] shrink-0 h-auto justify-start bg-transparent">
             <TabsTrigger value="chart" className="text-xs">Chart</TabsTrigger>
             <TabsTrigger value="trade" className="text-xs">Trade</TabsTrigger>
-            <TabsTrigger value="book" className="text-xs">Book</TabsTrigger>
+            <TabsTrigger value="book" className="text-xs">Orderbook</TabsTrigger>
           </TabsList>
           <TabsContent value="chart" className="flex-1 min-h-0 flex flex-col mt-0 data-[state=inactive]:hidden">
             <div className="flex-1 min-h-0">
@@ -271,13 +273,45 @@ function TerminalSkeleton() {
 
       {/* Body skeleton — 2 column layout */}
       <div className="flex-1 flex min-h-0">
-        {/* Chart area */}
-        <div className="flex-1 min-w-0 bg-muted/20 animate-pulse" />
+        {/* Left column */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 bg-muted/20 animate-pulse" />
+          <div className="h-[220px] shrink-0 border-t border-[var(--card-border)] p-3 space-y-2">
+            <div className="flex gap-2">
+              <div className="h-6 w-16 bg-muted animate-pulse rounded" />
+              <div className="h-6 w-16 bg-muted animate-pulse rounded" />
+              <div className="h-6 w-16 bg-muted animate-pulse rounded" />
+            </div>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-4 w-10 bg-muted animate-pulse rounded" />
+                <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
+                <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
+                <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Right column */}
         <div className="w-[340px] xl:w-[380px] shrink-0 border-l border-[var(--card-border)] flex flex-col">
+          {/* Trade panel skeleton */}
+          <div className="shrink-0 p-3 space-y-3 border-b border-[var(--card-border)]">
+            <div className="h-4 w-12 bg-muted animate-pulse rounded" />
+            <div className="grid grid-cols-2 gap-1">
+              <div className="h-8 bg-muted animate-pulse rounded" />
+              <div className="h-8 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <div className="h-8 bg-muted animate-pulse rounded" />
+              <div className="h-8 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="h-8 w-full bg-muted animate-pulse rounded" />
+            <div className="h-8 w-full bg-muted animate-pulse rounded" />
+            <div className="h-10 w-full bg-muted animate-pulse rounded" />
+          </div>
           {/* Orderbook skeleton */}
-          <div className="flex-[45] p-3 space-y-1.5 border-b border-[var(--card-border)]">
+          <div className="flex-1 p-3 space-y-1.5">
             <div className="h-4 w-20 bg-muted animate-pulse rounded mb-3" />
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex justify-between">
@@ -295,39 +329,7 @@ function TerminalSkeleton() {
               </div>
             ))}
           </div>
-          {/* Trade panel skeleton */}
-          <div className="flex-[55] p-3 space-y-3">
-            <div className="h-4 w-12 bg-muted animate-pulse rounded" />
-            <div className="grid grid-cols-2 gap-1">
-              <div className="h-8 bg-muted animate-pulse rounded" />
-              <div className="h-8 bg-muted animate-pulse rounded" />
-            </div>
-            <div className="grid grid-cols-2 gap-1">
-              <div className="h-8 bg-muted animate-pulse rounded" />
-              <div className="h-8 bg-muted animate-pulse rounded" />
-            </div>
-            <div className="h-8 w-full bg-muted animate-pulse rounded" />
-            <div className="h-8 w-full bg-muted animate-pulse rounded" />
-            <div className="h-10 w-full bg-muted animate-pulse rounded" />
-          </div>
         </div>
-      </div>
-
-      {/* Bottom tabs skeleton */}
-      <div className="h-[200px] shrink-0 border-t border-[var(--card-border)] p-3 space-y-2">
-        <div className="flex gap-2">
-          <div className="h-6 w-16 bg-muted animate-pulse rounded" />
-          <div className="h-6 w-16 bg-muted animate-pulse rounded" />
-          <div className="h-6 w-16 bg-muted animate-pulse rounded" />
-        </div>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className="h-4 w-10 bg-muted animate-pulse rounded" />
-            <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
-            <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
-            <div className="h-4 flex-1 bg-muted animate-pulse rounded" />
-          </div>
-        ))}
       </div>
     </div>
   );
