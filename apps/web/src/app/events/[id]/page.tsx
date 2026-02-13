@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getEvent, formatVolume, isPlaceholderMarket, type IndexerMarket } from '@/lib/indexer';
 import { buildOutcomeEntries, getMaxOutcomePrice, isBinaryYesNo, isNoOutcome, isYesOutcome } from '@/lib/outcomes';
 import { shouldUseCompactTable, extractShortNames } from '@/lib/question-parser';
+import type { OutcomeEntry } from '@/lib/outcomes';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -211,11 +212,12 @@ export default async function EventPage({
   if (shortNamesList) {
     visibleMarkets.forEach((m, i) => shortNames.set(m.id, shortNamesList[i]));
   }
+  const compactIsBinary = useCompact && visibleMarkets.length > 0 && isBinaryYesNo(visibleMarkets[0].outcomes);
 
-  // Sort helper: compact mode sorts by YES probability desc, otherwise by 24h volume
+  // Sort helper: compact mode sorts by leading outcome price desc, otherwise by 24h volume
   const sortMarkets = (arr: IndexerMarket[]) =>
     useCompact
-      ? arr.sort((a, b) => (getYesPrice(b) ?? 0) - (getYesPrice(a) ?? 0))
+      ? arr.sort((a, b) => (getLeadingOutcome(b)?.price ?? 0) - (getLeadingOutcome(a)?.price ?? 0))
       : arr.sort((a, b) => (b.volume24hr ?? 0) - (a.volume24hr ?? 0));
 
   const liveMarkets = sortMarkets(
@@ -378,7 +380,7 @@ export default async function EventPage({
             <span className="font-mono text-xs text-[var(--foreground-muted)]">({liveMarkets.length})</span>
           </div>
           {useCompact ? (
-            <CompactMarketTable markets={liveMarkets} shortNames={shortNames} startRank={1} />
+            <CompactMarketTable markets={liveMarkets} shortNames={shortNames} startRank={1} isBinary={compactIsBinary} />
           ) : (
             <div className="space-y-3">
               {liveMarkets.map((market, index) => (
@@ -404,6 +406,7 @@ export default async function EventPage({
                 markets={inReviewMarkets}
                 shortNames={shortNames}
                 startRank={liveMarkets.length + 1}
+                isBinary={compactIsBinary}
               />
             ) : (
               <div className="space-y-3">
@@ -431,6 +434,7 @@ export default async function EventPage({
                 markets={closedMarkets}
                 shortNames={shortNames}
                 startRank={liveMarkets.length + inReviewMarkets.length + 1}
+                isBinary={compactIsBinary}
               />
             ) : (
               <div className="space-y-3">
@@ -446,23 +450,25 @@ export default async function EventPage({
   );
 }
 
-function getYesPrice(market: IndexerMarket): number | null {
-  if (!market.outcomes || !market.outcomePrices) return null;
-  const idx = market.outcomes.findIndex((o) => isYesOutcome(o));
-  if (idx === -1) return null;
-  const raw = market.outcomePrices[idx];
-  const price = typeof raw === 'string' ? parseFloat(raw) : raw;
-  return Number.isFinite(price) ? price : null;
+/** Get the leading (highest-priced) outcome for a market. */
+function getLeadingOutcome(market: IndexerMarket): OutcomeEntry | null {
+  const entries = buildOutcomeEntries(market.outcomes, market.outcomePrices);
+  if (entries.length === 0) return null;
+  return entries.reduce((best, o) =>
+    (o.price ?? 0) > (best.price ?? 0) ? o : best,
+  );
 }
 
 function CompactMarketTable({
   markets,
   shortNames,
   startRank,
+  isBinary,
 }: {
   markets: IndexerMarket[];
   shortNames: Map<string, string>;
   startRank: number;
+  isBinary: boolean;
 }) {
   return (
     <div className="glass-card overflow-hidden">
@@ -470,7 +476,7 @@ function CompactMarketTable({
       <div className="hidden sm:flex items-center gap-2 px-4 py-2 border-b border-[var(--card-border)] text-[0.6rem] font-mono uppercase tracking-wider text-[var(--foreground-muted)]">
         <span className="w-8 text-center">#</span>
         <span className="flex-1 ml-2">Name</span>
-        <span className="w-40 text-right">Probability</span>
+        <span className="w-48 text-right">Leading</span>
         <span className="w-20 text-right hidden lg:block">Volume</span>
       </div>
 
@@ -478,8 +484,11 @@ function CompactMarketTable({
       {markets.map((market, i) => {
         const rank = startRank + i;
         const name = shortNames.get(market.id) ?? market.question;
-        const yesPrice = getYesPrice(market);
-        const pct = yesPrice != null ? yesPrice * 100 : null;
+        const leading = getLeadingOutcome(market);
+        const pct = leading?.price != null ? leading.price * 100 : null;
+        const barColor = leading ? leading.color : 'var(--success)';
+        // For binary Yes/No, don't show the label (it's always "Yes")
+        const showLabel = !isBinary && leading;
 
         return (
           <Link
@@ -503,34 +512,52 @@ function CompactMarketTable({
                   className="price-bar-fill"
                   style={{
                     width: `${pct ?? 0}%`,
-                    background: 'linear-gradient(to right, var(--success), var(--success)/66)',
+                    background: `linear-gradient(to right, ${barColor}, ${barColor}66)`,
                     height: '3px',
                   }}
                 />
               </div>
             </div>
 
-            {/* Probability bar + percentage (desktop) */}
-            <div className="hidden sm:flex items-center gap-2 w-40 shrink-0 justify-end">
+            {/* Leading outcome + bar + percentage (desktop) */}
+            <div className="hidden sm:flex items-center gap-2 w-48 shrink-0 justify-end">
+              {showLabel && (
+                <span
+                  className="font-mono text-[0.6rem] uppercase truncate max-w-[5rem]"
+                  style={{ color: barColor }}
+                >
+                  {leading.label}
+                </span>
+              )}
               <div className="price-bar flex-1" style={{ height: '3px' }}>
                 <div
                   className="price-bar-fill"
                   style={{
                     width: `${pct ?? 0}%`,
-                    background: 'linear-gradient(to right, var(--success), var(--success)/66)',
+                    background: `linear-gradient(to right, ${barColor}, ${barColor}66)`,
                     height: '3px',
                   }}
                 />
               </div>
-              <span className="font-mono text-xs font-bold w-12 text-right text-[var(--success)]">
+              <span className="font-mono text-xs font-bold w-12 text-right" style={{ color: barColor }}>
                 {pct != null ? `${pct.toFixed(1)}%` : 'N/A'}
               </span>
             </div>
 
-            {/* Mobile percentage */}
-            <span className="sm:hidden font-mono text-xs font-bold text-[var(--success)] shrink-0">
-              {pct != null ? `${pct.toFixed(1)}%` : 'N/A'}
-            </span>
+            {/* Mobile: label + percentage */}
+            <div className="sm:hidden flex items-center gap-1 shrink-0">
+              {showLabel && (
+                <span
+                  className="font-mono text-[0.55rem] uppercase truncate max-w-[3rem]"
+                  style={{ color: barColor }}
+                >
+                  {leading.label}
+                </span>
+              )}
+              <span className="font-mono text-xs font-bold shrink-0" style={{ color: barColor }}>
+                {pct != null ? `${pct.toFixed(1)}%` : 'N/A'}
+              </span>
+            </div>
 
             {/* Volume (lg only) */}
             <span className="hidden lg:block w-20 text-right font-mono text-xs text-[var(--foreground-muted)] shrink-0">

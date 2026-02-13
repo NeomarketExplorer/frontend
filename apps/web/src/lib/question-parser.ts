@@ -1,5 +1,3 @@
-import { isBinaryYesNo } from './outcomes';
-
 /**
  * Extract short names from a set of questions that share a common pattern.
  *
@@ -50,14 +48,28 @@ export function extractShortNames(questions: string[]): string[] | null {
 }
 
 /**
+ * Check if all markets share the same set of outcome labels.
+ */
+function allOutcomesSame(markets: { outcomes: string[] }[]): boolean {
+  if (markets.length === 0) return false;
+  const first = markets[0].outcomes.map((o) => o.trim().toLowerCase()).join('|');
+  return markets.every(
+    (m) => m.outcomes.map((o) => o.trim().toLowerCase()).join('|') === first,
+  );
+}
+
+/**
  * Determine whether an event with these markets should render as a compact
  * ranked table instead of full-width MarketCards.
+ *
+ * Triggers when: 5+ markets, all share the same outcomes, and questions
+ * have a common prefix/suffix pattern (extractable short names).
  */
 export function shouldUseCompactTable(
   markets: { question: string; outcomes: string[] }[],
 ): boolean {
   if (markets.length < 5) return false;
-  if (!markets.every((m) => isBinaryYesNo(m.outcomes))) return false;
+  if (!allOutcomesSame(markets)) return false;
 
   const names = extractShortNames(markets.map((m) => m.question));
   return names !== null;
