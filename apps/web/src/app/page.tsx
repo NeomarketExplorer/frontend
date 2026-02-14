@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getStats, getCategories, formatVolume, type IndexerStats, type IndexerCategory } from '@/lib/indexer';
 import { HomeEvents } from '@/components/home-events';
+import { HomeMarkets } from '@/components/home-markets';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,15 +154,33 @@ export default function HomePage() {
             <div className="w-1 h-5 bg-gradient-to-b from-[var(--accent)] to-[var(--success)] rounded-full" />
             <h2 className="text-lg sm:text-xl font-bold tracking-tight">Trending Events</h2>
           </div>
-          <a
+          <Link
             href="/events"
             className="font-mono text-xs text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors"
           >
             View All -&gt;
-          </a>
+          </Link>
         </div>
 
         <HomeEvents category={selectedCategory} />
+      </section>
+
+      {/* Discovery Feed: Trending Markets */}
+      <section>
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-5 bg-gradient-to-b from-[var(--success)] to-[var(--danger)] rounded-full" />
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight">Trending Markets</h2>
+          </div>
+          <Link
+            href="/markets"
+            className="font-mono text-xs text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors"
+          >
+            View All -&gt;
+          </Link>
+        </div>
+
+        <HomeMarkets category={selectedCategory} />
       </section>
     </div>
   );

@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@app/ui';
-import { useLeaderboard } from '@/hooks';
+import { useLeaderboardFiltered } from '@/hooks';
 import { formatVolume } from '@/lib/indexer';
 import type { LeaderboardTrader } from '@/lib/clickhouse';
+import { getCategories, type IndexerCategory } from '@/lib/indexer';
+import { EventSearch } from '@/components/event-search';
 
 type SortOption = 'pnl' | 'volume' | 'trades';
 type PeriodOption = '24h' | '7d' | '30d' | 'all';
@@ -25,13 +27,59 @@ const PERIOD_OPTIONS: { value: PeriodOption; label: string }[] = [
 export default function LeaderboardPage() {
   const [sort, setSort] = useState<SortOption>('pnl');
   const [period, setPeriod] = useState<PeriodOption>('7d');
-  const { data, isLoading } = useLeaderboard(sort, period);
+  const [category, setCategory] = useState<string | null>(null);
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [eventLabel, setEventLabel] = useState<string | null>(null);
+  const [categories, setCategories] = useState<IndexerCategory[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    getCategories()
+      .then((cats) => {
+        if (!mounted) return;
+        setCategories([...cats].sort((a, b) => b.count - a.count));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCategories([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedCategoryLabel = useMemo(() => {
+    if (!category) return 'All categories';
+    return categories.find((c) => c.slug === category)?.label ?? category;
+  }, [category, categories]);
+
+  const { data, isLoading } = useLeaderboardFiltered({
+    sort,
+    period,
+    category,
+    eventId,
+    limit: 50,
+  });
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' && data) {
+      // Devtools sanity check: confirm backend returns non-empty for filtered queries.
+      console.debug(
+        `[leaderboard] sort=${sort} period=${period} category=${category ?? ''} eventId=${eventId ?? ''} traders=${data.traders?.length ?? 0}`
+      );
+    }
+  }, [data, sort, period, category, eventId]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl font-bold">Leaderboard</h1>
+        <div>
+          <h1 className="text-xl font-bold">Leaderboard</h1>
+          <p className="font-mono text-xs text-[var(--foreground-muted)] mt-1">
+            Realized-only. Based on on-chain settlements and redemptions.
+          </p>
+        </div>
 
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-3">
@@ -67,6 +115,61 @@ export default function LeaderboardPage() {
                 {option.label}
               </button>
             ))}
+          </div>
+
+          {/* Category filter */}
+          <label className="sr-only" htmlFor="leaderboard-category">Category</label>
+          <select
+            id="leaderboard-category"
+            value={category ?? ''}
+            onChange={(e) => setCategory(e.target.value ? e.target.value : null)}
+            className="bg-[var(--card)] border border-[var(--card-border)] font-mono text-xs px-2 py-2 h-[34px]"
+            title={selectedCategoryLabel}
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Event filter */}
+      <div className="glass-card p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-[260px]">
+            <EventSearch
+              placeholder="Filter by event..."
+              className="w-full"
+              showOnlyLive={false}
+              navigateOnSelect={false}
+              onSelect={(evt) => {
+                setEventId(evt.id);
+                setEventLabel(evt.title);
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            {eventId ? (
+              <div className="font-mono text-xs text-[var(--foreground-muted)]">
+                Event: <span className="text-[var(--foreground)]">{eventLabel ?? eventId}</span>
+              </div>
+            ) : (
+              <div className="font-mono text-xs text-[var(--foreground-muted)]">Event: All</div>
+            )}
+            {eventId && (
+              <button
+                onClick={() => {
+                  setEventId(null);
+                  setEventLabel(null);
+                }}
+                className="btn btn-ghost"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       </div>

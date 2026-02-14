@@ -9,12 +9,16 @@ interface EventSearchProps {
   placeholder?: string;
   className?: string;
   showOnlyLive?: boolean;
+  onSelect?: (event: IndexerEvent) => void;
+  navigateOnSelect?: boolean;
 }
 
 export function EventSearch({
   placeholder = 'Search events...',
   className = '',
   showOnlyLive = false,
+  onSelect,
+  navigateOnSelect = true,
 }: EventSearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IndexerEvent[]>([]);
@@ -123,7 +127,10 @@ export function EventSearch({
     setQuery('');
     setIsOpen(false);
     setResults([]);
-    router.push(`/events/${event.id}`);
+    onSelect?.(event);
+    if (navigateOnSelect) {
+      router.push(`/events/${event.id}`);
+    }
   };
 
   const getStatusBadge = (event: IndexerEvent) => {

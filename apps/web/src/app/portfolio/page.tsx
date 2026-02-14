@@ -328,6 +328,20 @@ function formatPnlDollar(value: number): { text: string; className: string } {
   };
 }
 
+function formatPriceUpdatedAt(ms: number | undefined): { text: string; className: string } {
+  if (!ms || ms <= 0) {
+    return { text: 'Price stale', className: 'text-[var(--danger)]' };
+  }
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) {
+    return { text: 'Price stale', className: 'text-[var(--danger)]' };
+  }
+  return {
+    text: `Updated ${d.toLocaleString()}`,
+    className: 'text-[var(--foreground-muted)]',
+  };
+}
+
 function OpenPositionsTable({
   positions,
   loading,
@@ -360,11 +374,26 @@ function OpenPositionsTable({
               const isYes = position.outcomeName.toLowerCase() === 'yes';
               const avgPrice = position.avg_price ?? 0;
               const costBasis = avgPrice * position.size;
-              const currentValue = position.current_value ?? 0;
-              const unrealizedPnl = position.unrealized_pnl ?? (currentValue - costBasis);
-              const pnlPct = position.pnl_percent ?? (costBasis > 0 ? ((currentValue - costBasis) / costBasis) * 100 : 0);
-              const pnlPositive = unrealizedPnl >= 0;
-              const pnlDollar = formatPnlDollar(unrealizedPnl);
+              const hasCurrentPrice = position.cur_price != null;
+              const hasBackendValue = position.current_value != null;
+              const currentValue = hasBackendValue
+                ? (position.current_value as number)
+                : hasCurrentPrice
+                  ? position.cur_price! * position.size
+                  : costBasis;
+
+              // Don't silently compute PnL from unrelated fallback fields.
+              const canShowUnrealized =
+                position.unrealized_pnl != null || hasBackendValue || hasCurrentPrice;
+              const unrealizedPnl = canShowUnrealized
+                ? (position.unrealized_pnl ?? (currentValue - costBasis))
+                : null;
+              const pnlPct = unrealizedPnl != null && costBasis > 0
+                ? (position.pnl_percent ?? ((unrealizedPnl / costBasis) * 100))
+                : null;
+              const pnlDollar = unrealizedPnl != null ? formatPnlDollar(unrealizedPnl) : null;
+              const stale = formatPriceUpdatedAt(position.price_updated_at_ms);
+              const showEstimateTag = !hasCurrentPrice;
               const marketLink = position.marketId
                 ? `/market/${position.marketId}`
                 : null;
@@ -412,22 +441,36 @@ function OpenPositionsTable({
                     </span>
                   </td>
                   <td className="text-right">
-                    <span className="font-mono text-sm font-bold">
-                      ${currentValue.toFixed(2)}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="font-mono text-sm font-bold">
+                        ${currentValue.toFixed(2)}
+                      </span>
+                      <span className={`font-mono text-[0.6rem] ${stale.className}`}>
+                        {stale.text}
+                      </span>
+                    </div>
                   </td>
                   <td className="text-right">
                     <div className="flex flex-col items-end gap-0.5">
-                      <span
-                        className={`font-mono text-xs font-bold ${pnlDollar.className}`}
-                      >
-                        {pnlDollar.text}
-                      </span>
-                      <span
-                        className={`font-mono text-[0.6rem] ${pnlPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
-                      >
-                        {pnlPositive ? '+' : ''}{pnlPct.toFixed(1)}%
-                      </span>
+                      {pnlDollar ? (
+                        <span className={`font-mono text-xs font-bold ${pnlDollar.className}`}>
+                          {pnlDollar.text}
+                          {showEstimateTag && (
+                            <span className="ml-1.5 text-[0.6rem] text-[var(--foreground-muted)]">est.</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-xs text-[var(--foreground-muted)]">-</span>
+                      )}
+                      {pnlPct != null ? (
+                        <span
+                          className={`font-mono text-[0.6rem] ${unrealizedPnl! >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
+                        >
+                          {unrealizedPnl! >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[0.6rem] text-[var(--foreground-muted)]">Price needed</span>
+                      )}
                     </div>
                   </td>
                 </tr>

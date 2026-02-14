@@ -101,6 +101,49 @@ export interface OnChainTrade {
   blockNumber: number;
 }
 
+export interface Position {
+  asset: string;
+  condition_id: string;
+  outcome_index: number;
+  /** Human-friendly outcome name (if available from ClickHouse metadata sync). */
+  outcome?: string;
+  /** Market question (if available from ClickHouse metadata sync). */
+  question?: string;
+  /** Market slug (if available from ClickHouse metadata sync). */
+  slug?: string;
+
+  size: number;
+  avg_price?: number;
+
+  // Optional enhanced fields (may not exist yet depending on indexer version).
+  current_price?: number;
+  current_value?: number;
+  unrealized_pnl?: number;
+  price_updated_at_ms?: number;
+  categories?: string[];
+  event_id?: string;
+
+  // Legacy/compat fields some indexers return
+  initial_value?: number;
+  realized_pnl?: number;
+  pnl_percent?: number;
+}
+
+export interface DiscoverMarket {
+  // Indexer-backed IDs (preferred).
+  marketId: string;
+  eventId?: string | null;
+  category?: string | null;
+
+  question: string;
+  outcomes?: string[];
+  outcomePrices?: number[];
+
+  // Windowed metrics (depends on backend implementation).
+  volume?: number;
+  liquidity?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Fetch helper
 // ---------------------------------------------------------------------------
@@ -156,11 +199,15 @@ export async function getLeaderboard(
   sort?: string,
   limit?: number,
   period?: string,
+  category?: string,
+  eventId?: string,
 ): Promise<LeaderboardResponse> {
   const params = new URLSearchParams();
   if (sort) params.set('sort', sort);
   if (limit) params.set('limit', limit.toString());
   if (period) params.set('period', period);
+  if (category) params.set('category', category);
+  if (eventId) params.set('eventId', eventId);
   return fetchClickHouse<LeaderboardResponse>(`/leaderboard?${params}`);
 }
 
@@ -174,6 +221,60 @@ export async function getOnChainTrades(
   if (limit) params.set('limit', limit.toString());
   if (offset) params.set('offset', offset.toString());
   return fetchClickHouse<OnChainTrade[]>(`/trades?${params}`);
+}
+
+export async function getPositions(user: string): Promise<Position[]> {
+  const params = new URLSearchParams();
+  params.set('user', user);
+  return fetchClickHouse<Position[]>(`/positions?${params}`);
+}
+
+export async function getDiscoverMarkets(opts: {
+  window: string;
+  limit?: number;
+  category?: string;
+}): Promise<DiscoverMarket[]> {
+  const params = new URLSearchParams();
+  params.set('window', opts.window);
+  if (opts.limit != null) params.set('limit', String(opts.limit));
+  if (opts.category) params.set('category', opts.category);
+
+  const raw = await fetchClickHouse<unknown>(`/discover/markets?${params}`);
+  const list = Array.isArray(raw)
+    ? raw
+    : (raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data))
+      ? (raw as { data: unknown[] }).data
+      : [];
+
+  return list.map((m: any) => {
+    const marketId = String(m.marketId ?? m.market_id ?? m.id ?? '');
+    const question = String(m.question ?? m.title ?? '');
+
+    const outcomes = Array.isArray(m.outcomes)
+      ? m.outcomes.map(String)
+      : typeof m.outcomes === 'string'
+        ? (() => { try { return JSON.parse(m.outcomes).map(String); } catch { return undefined; } })()
+        : undefined;
+
+    const outcomePrices = Array.isArray(m.outcomePrices)
+      ? m.outcomePrices.map(Number)
+      : typeof m.outcomePrices === 'string'
+        ? (() => { try { return JSON.parse(m.outcomePrices).map(Number); } catch { return undefined; } })()
+        : Array.isArray(m.outcome_prices)
+          ? m.outcome_prices.map(Number)
+          : undefined;
+
+    return {
+      marketId,
+      eventId: m.eventId ?? m.event_id ?? null,
+      category: m.category ?? null,
+      question,
+      outcomes,
+      outcomePrices,
+      volume: typeof m.volume === 'number' ? m.volume : (typeof m.volumeUsd === 'number' ? m.volumeUsd : undefined),
+      liquidity: typeof m.liquidity === 'number' ? m.liquidity : undefined,
+    };
+  }).filter((m) => m.marketId && m.question);
 }
 
 export async function getMarketCandles(opts: {

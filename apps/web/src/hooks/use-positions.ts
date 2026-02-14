@@ -2,6 +2,8 @@
  * TanStack Query hooks for positions and portfolio data.
  * Fetches from Polymarket Data API via /api/data proxy,
  * then enriches positions with market names from Gamma API.
+ *
+ * Open positions: prefer ClickHouse `/positions?user=...` as source of truth.
  */
 
 import { useMemo } from 'react';
@@ -9,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
 import { searchMarkets } from '@/lib/indexer';
+import { getPositions as getChPositions, type Position as ClickHousePosition } from '@/lib/clickhouse';
 
 // Route through proxy to avoid CORS
 const dataClient = createDataClient({ baseUrl: '/api/data' });
@@ -31,6 +34,45 @@ export interface EnrichedPosition extends Position {
   marketClosed: boolean;
   /** The final resolution price (if resolved) */
   resolutionPrice: number | null;
+
+  // ClickHouse-only extras (optional; used to avoid hiding backend gaps).
+  price_updated_at_ms?: number;
+  categories?: string[];
+  event_id?: string;
+}
+
+function enrichClickHousePositions(positions: ClickHousePosition[]): EnrichedPosition[] {
+  return positions.map((p) => {
+    // Convert ClickHouse shape to the fields the UI expects (Data API-compatible).
+    const base: Position = {
+      asset: p.asset,
+      condition_id: p.condition_id,
+      outcome_index: p.outcome_index,
+      size: p.size,
+      avg_price: p.avg_price,
+      cur_price: p.current_price,
+      initial_value: p.initial_value,
+      current_value: p.current_value,
+      pnl: undefined,
+      pnl_percent: p.pnl_percent,
+      realized_pnl: p.realized_pnl,
+      unrealized_pnl: p.unrealized_pnl,
+    };
+
+    return {
+      ...base,
+      marketQuestion: p.question ?? null,
+      marketId: null,
+      marketSlug: p.slug ?? null,
+      outcomeName: p.outcome ?? (p.outcome_index === 0 ? 'Yes' : 'No'),
+      marketClosed: false,
+      resolutionPrice: null,
+
+      price_updated_at_ms: p.price_updated_at_ms,
+      categories: p.categories,
+      event_id: p.event_id,
+    };
+  });
 }
 
 interface MarketInfo {
@@ -150,8 +192,16 @@ export function usePositions() {
     queryKey: positionKeys.user(address ?? ''),
     queryFn: async () => {
       if (!address) return [];
-      const positions = await dataClient.getOpenPositions(address);
-      return enrichPositionsWithMarketData(positions);
+      try {
+        const chPositions = await getChPositions(address);
+        // Filter to open-only (ClickHouse endpoint currently returns balances)
+        const open = (Array.isArray(chPositions) ? chPositions : []).filter((p) => (p.size ?? 0) > 0);
+        return enrichClickHousePositions(open);
+      } catch {
+        // Fallback to Data API if ClickHouse is unavailable
+        const positions = await dataClient.getOpenPositions(address);
+        return enrichPositionsWithMarketData(positions);
+      }
     },
     enabled: !!address,
     staleTime: 30 * 1000,

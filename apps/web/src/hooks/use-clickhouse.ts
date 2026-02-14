@@ -61,6 +61,27 @@ export function useLeaderboard(sort?: string, period?: string) {
   });
 }
 
+export function useLeaderboardFiltered(opts: {
+  sort?: string;
+  period?: string;
+  category?: string | null;
+  eventId?: string | null;
+  limit?: number;
+}) {
+  const sort = opts.sort;
+  const period = opts.period;
+  const category = opts.category ?? undefined;
+  const eventId = opts.eventId ?? undefined;
+  const limit = opts.limit;
+
+  return useQuery<LeaderboardResponse>({
+    queryKey: ['ch-leaderboard', sort, period, category, eventId, limit],
+    queryFn: () => getLeaderboard(sort, limit, period, category, eventId),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useOnChainTrades(tokenId?: string | null, limit?: number) {
   return useQuery<OnChainTrade[]>({
     queryKey: ['ch-trades', tokenId, limit],

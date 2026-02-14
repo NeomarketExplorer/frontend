@@ -54,7 +54,21 @@ export function BottomTabs({ tokenId, conditionId, outcomes }: BottomTabsProps) 
             <div className="space-y-1 text-xs font-mono">
               {positions.map((pos) => {
                 const label = outcomes[pos.outcome_index]?.label ?? `Outcome ${pos.outcome_index}`;
-                const pnl = pos.pnl ?? 0;
+                const costBasis = (pos.avg_price ?? 0) * pos.size;
+                const hasCurrentPrice = pos.cur_price != null;
+                const hasBackendValue = pos.current_value != null;
+                const value = hasBackendValue
+                  ? (pos.current_value as number)
+                  : hasCurrentPrice
+                    ? pos.cur_price! * pos.size
+                    : costBasis;
+
+                const canShowUnrealized =
+                  pos.unrealized_pnl != null || hasBackendValue || hasCurrentPrice;
+                const pnl = canShowUnrealized
+                  ? (pos.unrealized_pnl ?? pos.pnl ?? (value - costBasis))
+                  : null;
+                const showEstimateTag = !hasCurrentPrice;
                 return (
                   <div key={pos.outcome_index} className="flex items-center justify-between py-1">
                     <div>
@@ -65,10 +79,17 @@ export function BottomTabs({ tokenId, conditionId, outcomes }: BottomTabsProps) 
                       )}
                     </div>
                     <div className="text-right">
-                      <span>${(pos.current_value ?? 0).toFixed(2)}</span>
-                      <span className={`ml-1.5 ${pnl >= 0 ? 'text-positive' : 'text-negative'}`}>
-                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
-                      </span>
+                      <span>${value.toFixed(2)}</span>
+                      {pnl != null ? (
+                        <span className={`ml-1.5 ${pnl >= 0 ? 'text-positive' : 'text-negative'}`}>
+                          {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                          {showEstimateTag && (
+                            <span className="ml-1 text-muted-foreground">est.</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="ml-1.5 text-muted-foreground">-</span>
+                      )}
                     </div>
                   </div>
                 );
