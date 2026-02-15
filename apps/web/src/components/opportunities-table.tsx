@@ -183,7 +183,7 @@ export function OpportunitiesTable() {
                         </Link>
                       </td>
                       <td className="text-center">
-                        <span className="font-mono text-xs font-bold text-[var(--success)]">
+                        <span className={`font-mono text-xs font-bold ${opp.recommendedOutcome.toLowerCase() === 'no' ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
                           {opp.recommendedOutcome}
                         </span>
                       </td>

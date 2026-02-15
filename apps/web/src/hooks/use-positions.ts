@@ -196,7 +196,20 @@ export function usePositions() {
         const chPositions = await getChPositions(address);
         // Filter to open-only (ClickHouse endpoint currently returns balances)
         const open = (Array.isArray(chPositions) ? chPositions : []).filter((p) => (p.size ?? 0) > 0);
-        return enrichClickHousePositions(open);
+        const enriched = enrichClickHousePositions(open);
+        // ClickHouse may not have market metadata — enrich missing names via Gamma API
+        const needsEnrichment = enriched.filter((p) => !p.marketQuestion);
+        if (needsEnrichment.length > 0) {
+          const gammaEnriched = await enrichPositionsWithMarketData(needsEnrichment);
+          const gammaMap = new Map(gammaEnriched.map((p) => [p.asset, p]));
+          return enriched.map((p) => {
+            if (p.marketQuestion) return p;
+            const gp = gammaMap.get(p.asset);
+            if (!gp) return p;
+            return { ...p, marketQuestion: gp.marketQuestion, marketId: gp.marketId, marketSlug: gp.marketSlug, outcomeName: gp.outcomeName, marketClosed: gp.marketClosed, resolutionPrice: gp.resolutionPrice };
+          });
+        }
+        return enriched;
       } catch {
         // Fallback to Data API if ClickHouse is unavailable
         const positions = await dataClient.getOpenPositions(address);

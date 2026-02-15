@@ -81,9 +81,21 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
 
   const height = 200;
 
-  // Create chart once on mount, tear down on unmount
+  // Create or re-create chart when container becomes available and data is ready
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current || chartData.length === 0) return;
+
+    // Tear down previous chart if it exists (e.g. interval change)
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    }
+
+    const isPositive = valueChange?.isPositive ?? true;
+    const lineColor = isPositive ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+    const areaTopColor = isPositive ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+    const areaBottomColor = isPositive ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.0)';
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -115,6 +127,9 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
     });
 
     const areaSeries = chart.addSeries(AreaSeries, {
+      lineColor,
+      topColor: areaTopColor,
+      bottomColor: areaBottomColor,
       lineWidth: 2,
       priceFormat: {
         type: 'custom',
@@ -124,6 +139,9 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
 
     chartRef.current = chart;
     seriesRef.current = areaSeries;
+
+    areaSeries.setData(chartData);
+    chart.timeScale().fitContent();
 
     function handleResize() {
       if (chartContainerRef.current) {
@@ -139,21 +157,6 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
       chartRef.current = null;
       seriesRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Update series data and colors when data or trend direction changes
-  useEffect(() => {
-    if (!seriesRef.current || chartData.length === 0) return;
-
-    const isPositive = valueChange?.isPositive ?? true;
-    seriesRef.current.applyOptions({
-      lineColor: isPositive ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)',
-      topColor: isPositive ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)',
-      bottomColor: isPositive ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.0)',
-    });
-    seriesRef.current.setData(chartData);
-    chartRef.current?.timeScale().fitContent();
   }, [chartData, valueChange?.isPositive]);
 
   const hasActivities = activities && activities.length > 0;

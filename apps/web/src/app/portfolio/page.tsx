@@ -408,7 +408,11 @@ function OpenPositionsTable({
                   onClick={marketLink ? () => router.push(marketLink) : undefined}
                 >
                   <td>
-                    {position.marketQuestion ? (
+                    {position.marketQuestion && marketLink ? (
+                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                        {position.marketQuestion}
+                      </Link>
+                    ) : position.marketQuestion ? (
                       <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
                         {position.marketQuestion}
                       </span>
@@ -554,7 +558,11 @@ function ResolvedPositionsTable({
                   onClick={marketLink ? () => router.push(marketLink) : undefined}
                 >
                   <td>
-                    {position.marketQuestion ? (
+                    {position.marketQuestion && marketLink ? (
+                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                        {position.marketQuestion}
+                      </Link>
+                    ) : position.marketQuestion ? (
                       <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
                         {position.marketQuestion}
                       </span>
