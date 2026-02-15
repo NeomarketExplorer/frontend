@@ -4,7 +4,7 @@ import { Badge, Button } from '@app/ui';
 import { formatVolume } from '@/lib/indexer';
 import type { MarketStats } from '@/lib/clickhouse';
 
-type TimeInterval = '1h' | '4h' | '1d' | '1w';
+type TimeInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
 
 interface CompactHeaderProps {
   question: string;
@@ -76,7 +76,7 @@ export function CompactHeader({
 
       {/* Interval buttons */}
       <div className="flex items-center gap-0.5 flex-shrink-0">
-        {(['1h', '4h', '1d', '1w'] as const).map((interval) => (
+        {(['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const).map((interval) => (
           <Button
             key={interval}
             variant={chartInterval === interval ? 'default' : 'ghost'}

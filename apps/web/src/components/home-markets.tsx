@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Skeleton } from '@app/ui';
 import { getDiscoverMarkets, type DiscoverMarket } from '@/lib/clickhouse';
@@ -13,6 +13,8 @@ import {
 
 type WindowOption = '1h' | '6h' | '24h' | '7d';
 
+const PAGE_SIZE = 12;
+
 const WINDOW_OPTIONS: { value: WindowOption; label: string }[] = [
   { value: '1h', label: '1h' },
   { value: '6h', label: '6h' },
@@ -24,29 +26,30 @@ export function HomeMarkets({ category }: { category?: string | null }) {
   const [window, setWindow] = useState<WindowOption>('1h');
   const [items, setItems] = useState<DiscoverMarket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const offsetRef = useRef(0);
 
+  // Initial load (and reset on window/category change)
   useEffect(() => {
     let mounted = true;
+    offsetRef.current = 0;
     setIsLoading(true);
     setError(null);
+    setHasMore(false);
 
-    getDiscoverMarkets({ window, limit: 12, category: category ?? undefined })
+    getDiscoverMarkets({ window, limit: PAGE_SIZE, offset: 0, category: category ?? undefined })
       .then((data) => {
         if (!mounted) return;
         setItems(data);
-        if (process.env.NODE_ENV !== 'production') {
-          // Devtools sanity check: compare this response to what renders.
-          console.debug(`[discover/markets] window=${window} category=${category ?? ''} limit=5`, data.slice(0, 5));
-        }
+        setHasMore(data.length === PAGE_SIZE);
+        offsetRef.current = data.length;
       })
       .catch((err) => {
         if (!mounted) return;
         setItems([]);
         setError(err instanceof Error ? err.message : 'Failed to load');
-        if (process.env.NODE_ENV !== 'production') {
-          console.debug(`[discover/markets] window=${window} category=${category ?? ''} failed`, err);
-        }
       })
       .finally(() => {
         if (!mounted) return;
@@ -56,6 +59,28 @@ export function HomeMarkets({ category }: { category?: string | null }) {
     return () => {
       mounted = false;
     };
+  }, [window, category]);
+
+  const loadMore = useCallback(() => {
+    setIsLoadingMore(true);
+
+    getDiscoverMarkets({
+      window,
+      limit: PAGE_SIZE,
+      offset: offsetRef.current,
+      category: category ?? undefined,
+    })
+      .then((data) => {
+        setItems((prev) => [...prev, ...data]);
+        setHasMore(data.length === PAGE_SIZE);
+        offsetRef.current += data.length;
+      })
+      .catch(() => {
+        setHasMore(false);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
   }, [window, category]);
 
   const showBinaryLabels =
@@ -85,7 +110,7 @@ export function HomeMarkets({ category }: { category?: string | null }) {
               <div
                 key={market.marketId}
                 className="event-card-item animate-fade-up"
-                style={{ animationDelay: `${(index % 12) * 40}ms` }}
+                style={{ animationDelay: `${(index % PAGE_SIZE) * 40}ms` }}
               >
                 <MarketCard market={market} showBinaryLabels={showBinaryLabels} />
               </div>
@@ -106,6 +131,18 @@ export function HomeMarkets({ category }: { category?: string | null }) {
       {!isLoading && items.length === 0 && !error && (
         <div className="glass-card p-10 text-center">
           <p className="font-mono text-sm text-[var(--foreground-muted)]">No markets found</p>
+        </div>
+      )}
+
+      {hasMore && !isLoading && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className="btn btn-ghost font-mono text-xs px-6 py-2"
+          >
+            {isLoadingMore ? 'Loading...' : 'Load more'}
+          </button>
         </div>
       )}
     </div>

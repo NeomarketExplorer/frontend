@@ -58,7 +58,9 @@ export interface MarketStats {
 export interface LeaderboardTrader {
   rank: number;
   user: string;
-  totalPnl: number;
+  realizedPnlUsd: number;
+  netCashflowUsd: number;
+  totalPnl: number;          // Legacy (equals netCashflowUsd)
   totalVolume: number;
   totalTrades: number;
   winRate: number | null;
@@ -70,6 +72,38 @@ export interface LeaderboardResponse {
   sort: string;
   updatedAt: number;
   traders: LeaderboardTrader[];
+}
+
+export interface ExplainEvent {
+  eventId: string;
+  txHash: string;
+  blockTimestamp: string;
+  blockTimestampUnix: number;
+  tokenId: string;
+  conditionId: string;
+  eventType: string;
+  quantity: number;
+  usdcDeltaUsd: number;
+  costBasisUsd: number;
+  realizedPnlUsd: number;
+  runningRealizedPnlUsd: number;
+  runningConditionShares: number | null;
+}
+
+export interface ExplainSummary {
+  totalEvents: number;
+  realizedPnlUsd: number;
+  cashflowUsd: number;
+  marketsTraded: number;
+  eventCountReturned: number;
+  eventLimit: number;
+}
+
+export interface LeaderboardExplainResponse {
+  user: string;
+  period: string;
+  summary: ExplainSummary;
+  events: ExplainEvent[];
 }
 
 export interface Candle {
@@ -211,15 +245,39 @@ export async function getLeaderboard(
   return fetchClickHouse<LeaderboardResponse>(`/leaderboard?${params}`);
 }
 
+export async function getLeaderboardExplain(opts: {
+  user: string;
+  metric?: string;
+  period?: string;
+  conditionId?: string;
+  from?: number;
+  to?: number;
+  limit?: number;
+}): Promise<LeaderboardExplainResponse> {
+  const params = new URLSearchParams();
+  params.set('user', opts.user);
+  if (opts.metric) params.set('metric', opts.metric);
+  if (opts.period) params.set('period', opts.period);
+  if (opts.conditionId) params.set('conditionId', opts.conditionId);
+  if (opts.from != null) params.set('from', opts.from.toString());
+  if (opts.to != null) params.set('to', opts.to.toString());
+  if (opts.limit != null) params.set('limit', opts.limit.toString());
+  return fetchClickHouse<LeaderboardExplainResponse>(`/leaderboard/explain?${params}`);
+}
+
 export async function getOnChainTrades(
   tokenId: string,
   limit?: number,
   offset?: number,
+  from?: number,
+  to?: number,
 ): Promise<OnChainTrade[]> {
   const params = new URLSearchParams();
   params.set('tokenId', tokenId);
   if (limit) params.set('limit', limit.toString());
   if (offset) params.set('offset', offset.toString());
+  if (from != null) params.set('from', from.toString());
+  if (to != null) params.set('to', to.toString());
   return fetchClickHouse<OnChainTrade[]>(`/trades?${params}`);
 }
 
@@ -232,12 +290,16 @@ export async function getPositions(user: string): Promise<Position[]> {
 export async function getDiscoverMarkets(opts: {
   window: string;
   limit?: number;
+  offset?: number;
   category?: string;
+  eventId?: string;
 }): Promise<DiscoverMarket[]> {
   const params = new URLSearchParams();
   params.set('window', opts.window);
   if (opts.limit != null) params.set('limit', String(opts.limit));
+  if (opts.offset != null) params.set('offset', String(opts.offset));
   if (opts.category) params.set('category', opts.category);
+  if (opts.eventId) params.set('eventId', opts.eventId);
 
   const raw = await fetchClickHouse<unknown>(`/discover/markets?${params}`);
   const list = Array.isArray(raw)

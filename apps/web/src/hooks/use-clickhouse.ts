@@ -5,6 +5,7 @@ import { useWalletStore } from '@/stores';
 import {
   getPortfolioHistory,
   getLeaderboard,
+  getLeaderboardExplain,
   getMarketCandles,
   getMarketStats,
   getOnChainTrades,
@@ -14,6 +15,7 @@ import {
   type UserStats,
   type MarketStats,
   type LeaderboardResponse,
+  type LeaderboardExplainResponse,
   type OnChainTrade,
 } from '@/lib/clickhouse';
 
@@ -82,10 +84,15 @@ export function useLeaderboardFiltered(opts: {
   });
 }
 
-export function useOnChainTrades(tokenId?: string | null, limit?: number) {
+export function useOnChainTrades(
+  tokenId?: string | null,
+  limit?: number,
+  from?: number,
+  to?: number,
+) {
   return useQuery<OnChainTrade[]>({
-    queryKey: ['ch-trades', tokenId, limit],
-    queryFn: () => getOnChainTrades(tokenId!, limit),
+    queryKey: ['ch-trades', tokenId, limit, from, to],
+    queryFn: () => getOnChainTrades(tokenId!, limit, undefined, from, to),
     enabled: !!tokenId,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -108,5 +115,27 @@ export function useMarketCandles(
     enabled: !!conditionId,
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+export function useLeaderboardExplain(
+  user?: string | null,
+  opts?: { metric?: string; period?: string; limit?: number },
+) {
+  const metric = opts?.metric;
+  const period = opts?.period;
+  const limit = opts?.limit;
+
+  return useQuery<LeaderboardExplainResponse>({
+    queryKey: ['ch-leaderboard-explain', user, metric, period, limit],
+    queryFn: () =>
+      getLeaderboardExplain({
+        user: user!,
+        metric,
+        period,
+        limit,
+      }),
+    enabled: !!user,
+    staleTime: 30_000,
   });
 }

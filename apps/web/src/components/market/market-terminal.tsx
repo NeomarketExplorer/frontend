@@ -19,14 +19,14 @@ import { TradePanel } from '@/components/market/trade-panel';
 import { OrderbookPanel } from '@/components/market/orderbook-panel';
 import { BottomTabs } from '@/components/market/bottom-tabs';
 
-type TimeInterval = '1h' | '4h' | '1d' | '1w';
+type TimeInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
 
 interface MarketTerminalProps {
   id: string;
 }
 
 export function MarketTerminal({ id }: MarketTerminalProps) {
-  const [chartInterval, setChartInterval] = useState<TimeInterval>('1w');
+  const [chartInterval, setChartInterval] = useState<TimeInterval>('1h');
   const { data: market, isLoading: marketLoading } = useMarket(id);
   const { orderForm } = useTradingStore();
 
@@ -186,7 +186,7 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
               {selectedMidpoint != null ? `${(selectedMidpoint * 100).toFixed(1)}c` : '--'}
             </span>
             <div className="flex items-center gap-0.5">
-              {(['1h', '4h', '1d', '1w'] as const).map((interval) => (
+              {(['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const).map((interval) => (
                 <button
                   key={interval}
                   onClick={() => setChartInterval(interval)}

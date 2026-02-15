@@ -7,6 +7,7 @@ import { formatVolume } from '@/lib/indexer';
 import type { LeaderboardTrader } from '@/lib/clickhouse';
 import { getCategories, type IndexerCategory } from '@/lib/indexer';
 import { EventSearch } from '@/components/event-search';
+import { LeaderboardExplainDialog } from '@/components/leaderboard-explain';
 
 type SortOption = 'pnl' | 'volume' | 'trades';
 type PeriodOption = '24h' | '7d' | '30d' | 'all';
@@ -31,6 +32,7 @@ export default function LeaderboardPage() {
   const [eventId, setEventId] = useState<string | null>(null);
   const [eventLabel, setEventLabel] = useState<string | null>(null);
   const [categories, setCategories] = useState<IndexerCategory[]>([]);
+  const [selectedTrader, setSelectedTrader] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -180,13 +182,26 @@ export default function LeaderboardPage() {
       ) : !data || data.traders.length === 0 ? (
         <LeaderboardEmpty />
       ) : (
-        <LeaderboardTable traders={data.traders} />
+        <LeaderboardTable traders={data.traders} onSelectTrader={setSelectedTrader} />
       )}
+
+      <LeaderboardExplainDialog
+        user={selectedTrader}
+        period={period}
+        sort={sort}
+        onClose={() => setSelectedTrader(null)}
+      />
     </div>
   );
 }
 
-function LeaderboardTable({ traders }: { traders: LeaderboardTrader[] }) {
+function LeaderboardTable({
+  traders,
+  onSelectTrader,
+}: {
+  traders: LeaderboardTrader[];
+  onSelectTrader: (user: string) => void;
+}) {
   return (
     <div className="glass-card overflow-hidden">
       <div className="overflow-x-auto">
@@ -204,7 +219,12 @@ function LeaderboardTable({ traders }: { traders: LeaderboardTrader[] }) {
           </thead>
           <tbody>
             {traders.map((trader, i) => (
-              <LeaderboardRow key={trader.user} trader={trader} index={i} />
+              <LeaderboardRow
+                key={trader.user}
+                trader={trader}
+                index={i}
+                onClick={() => onSelectTrader(trader.user)}
+              />
             ))}
           </tbody>
         </table>
@@ -213,14 +233,24 @@ function LeaderboardTable({ traders }: { traders: LeaderboardTrader[] }) {
   );
 }
 
-function LeaderboardRow({ trader, index }: { trader: LeaderboardTrader; index: number }) {
+function LeaderboardRow({
+  trader,
+  index,
+  onClick,
+}: {
+  trader: LeaderboardTrader;
+  index: number;
+  onClick: () => void;
+}) {
   const isTopThree = trader.rank <= 3;
-  const pnlPositive = trader.totalPnl >= 0;
+  const pnl = trader.realizedPnlUsd ?? trader.totalPnl;
+  const pnlPositive = pnl >= 0;
 
   return (
     <tr
-      className="market-row-item animate-fade-up"
+      className="market-row-item animate-fade-up cursor-pointer hover:bg-[var(--card-hover,var(--card))]"
       style={{ animationDelay: `${index * 30}ms` }}
+      onClick={onClick}
     >
       <td>
         <span
@@ -242,7 +272,7 @@ function LeaderboardRow({ trader, index }: { trader: LeaderboardTrader; index: n
             pnlPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'
           }`}
         >
-          {pnlPositive ? '+' : '-'}${Math.abs(trader.totalPnl).toFixed(2)}
+          {pnlPositive ? '+' : '-'}${Math.abs(pnl).toFixed(2)}
         </span>
       </td>
       <td className="text-right">
