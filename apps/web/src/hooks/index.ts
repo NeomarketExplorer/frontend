@@ -16,3 +16,4 @@ export * from './use-conditional-token-approval';
 export * from './use-conditional-token-balance';
 export * from './use-enable-trading';
 export * from './use-clickhouse';
+export * from './use-redeem-position';

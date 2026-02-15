@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ConnectButton } from '@/components/connect-button';
 import { AuthGuard } from '@/components/auth-guard';
 import { PortfolioChart } from '@/components/portfolio-chart';
 import { Skeleton, toast } from '@app/ui';
-import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, type EnrichedPosition } from '@/hooks';
+import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, useRedeemPosition, type EnrichedPosition } from '@/hooks';
 import { useWalletStore } from '@/stores';
 
 export default function PortfolioPage() {
@@ -224,7 +225,7 @@ function PositionsTab({
   loading: boolean;
 }) {
   const [subTab, setSubTab] = useState<PositionSubTab>('open');
-  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions();
+  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions({ enabled: subTab === 'resolved' });
 
   return (
     <div className="space-y-4">
@@ -349,6 +350,8 @@ function OpenPositionsTable({
   positions: EnrichedPosition[] | undefined;
   loading: boolean;
 }) {
+  const router = useRouter();
+
   if (loading) return <PositionsLoadingSkeleton />;
   if (!positions || positions.length === 0) {
     return <PositionsEmptyState message="No open positions yet." />;
@@ -382,7 +385,6 @@ function OpenPositionsTable({
                   ? position.cur_price! * position.size
                   : costBasis;
 
-              // Don't silently compute PnL from unrelated fallback fields.
               const canShowUnrealized =
                 position.unrealized_pnl != null || hasBackendValue || hasCurrentPrice;
               const unrealizedPnl = canShowUnrealized
@@ -398,11 +400,12 @@ function OpenPositionsTable({
                 ? `/market/${position.marketId}`
                 : null;
 
-              const row = (
+              return (
                 <tr
-                  key={i}
-                  className="market-row-item animate-fade-up group"
+                  key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
+                  className="market-row-item animate-fade-up group cursor-pointer"
                   style={{ animationDelay: `${i * 40}ms` }}
+                  onClick={marketLink ? () => router.push(marketLink) : undefined}
                 >
                   <td>
                     {position.marketQuestion ? (
@@ -475,12 +478,6 @@ function OpenPositionsTable({
                   </td>
                 </tr>
               );
-
-              return marketLink ? (
-                <Link key={i} href={marketLink} className="contents">
-                  {row}
-                </Link>
-              ) : row;
             })}
           </tbody>
         </table>
@@ -496,6 +493,23 @@ function ResolvedPositionsTable({
   positions: EnrichedPosition[] | undefined;
   loading: boolean;
 }) {
+  const router = useRouter();
+  const { redeem, isPending: isRedeeming } = useRedeemPosition();
+  const [redeemingConditionId, setRedeemingConditionId] = useState<string | null>(null);
+
+  const handleClaim = async (conditionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't navigate to market page
+    setRedeemingConditionId(conditionId);
+    try {
+      await redeem(conditionId);
+      toast({ variant: 'success', title: 'Position redeemed', description: 'USDC credited to your wallet' });
+    } catch (err) {
+      toast({ variant: 'error', title: 'Redemption failed', description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setRedeemingConditionId(null);
+    }
+  };
+
   if (loading) return <PositionsLoadingSkeleton />;
   if (!positions || positions.length === 0) {
     return <PositionsEmptyState message="No resolved positions yet." />;
@@ -513,6 +527,7 @@ function ResolvedPositionsTable({
               <th className="text-right w-24">Resolution</th>
               <th className="text-right w-20">Outcome</th>
               <th className="text-right w-28">Realized P&L</th>
+              <th className="text-right w-24">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -522,17 +537,21 @@ function ResolvedPositionsTable({
               const resolutionPrice = position.resolutionPrice;
               const realizedPnl = position.realized_pnl ?? 0;
               const pnlDollar = formatPnlDollar(realizedPnl);
-              // Determine if the outcome was a win: resolution price is 1 for the winning side
               const isWin = resolutionPrice != null && resolutionPrice > 0.5;
               const marketLink = position.marketId
                 ? `/market/${position.marketId}`
                 : null;
 
-              const row = (
+              // Claimable: market closed, winning outcome, still holds tokens
+              const isClaimable = position.marketClosed && isWin && position.size > 0;
+              const isThisRedeeming = isRedeeming && redeemingConditionId === position.condition_id;
+
+              return (
                 <tr
-                  key={i}
-                  className="market-row-item animate-fade-up group"
+                  key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
+                  className="market-row-item animate-fade-up group cursor-pointer"
                   style={{ animationDelay: `${i * 40}ms` }}
+                  onClick={marketLink ? () => router.push(marketLink) : undefined}
                 >
                   <td>
                     {position.marketQuestion ? (
@@ -585,14 +604,31 @@ function ResolvedPositionsTable({
                       {pnlDollar.text}
                     </span>
                   </td>
+                  <td className="text-right">
+                    {isClaimable ? (
+                      <div className="flex flex-col items-end gap-0.5">
+                        <button
+                          className="btn btn-primary font-mono text-xs"
+                          disabled={isRedeeming}
+                          onClick={(e) => handleClaim(position.condition_id, e)}
+                        >
+                          {isThisRedeeming ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                              Claiming...
+                            </span>
+                          ) : (
+                            'Claim'
+                          )}
+                        </button>
+                        <span className="font-mono text-[0.6rem] text-[var(--foreground-muted)]">
+                          ~${(position.size * (resolutionPrice ?? 1)).toFixed(2)} USDC
+                        </span>
+                      </div>
+                    ) : null}
+                  </td>
                 </tr>
               );
-
-              return marketLink ? (
-                <Link key={i} href={marketLink} className="contents">
-                  {row}
-                </Link>
-              ) : row;
             })}
           </tbody>
         </table>
@@ -670,7 +706,7 @@ function ActivityTab({
           <tbody>
             {activity.map((item, i) => (
               <tr
-                key={i}
+                key={item.transaction_hash ?? `${item.timestamp}-${i}`}
                 className="market-row-item animate-fade-up"
                 style={{ animationDelay: `${i * 30}ms` }}
               >
