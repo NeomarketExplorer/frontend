@@ -15,8 +15,10 @@ function useOpportunityMarkets() {
       ]);
       return [...page1.data, ...page2.data] as IndexerMarket[];
     },
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,        // 5 min — opportunities data doesn't change fast
+    gcTime: 10 * 60_000,           // keep in cache 10 min
+    refetchInterval: 5 * 60_000,   // refresh every 5 min
+    refetchOnWindowFocus: false,    // don't refetch on tab focus
   });
 }
 
