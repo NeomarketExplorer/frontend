@@ -49,10 +49,6 @@ export function CandleChart({
 
     const sorted = [...candles].sort((a, b) => a.time - b.time);
 
-    // The API currently rounds prices, so many candles become doji (open == close).
-    // If we color strictly by (close >= open), dojis skew green and charts look wrong.
-    // Workaround: color dojis by previous close; if still tied, keep the previous color.
-    const eps = 1e-12;
     const up = 'rgb(34, 197, 94)';
     const down = 'rgb(239, 68, 68)';
     const upVol = 'rgba(34, 197, 94, 0.35)';
@@ -60,21 +56,10 @@ export function CandleChart({
 
     const cd: CandlestickData<Time>[] = [];
     const vd: HistogramData<Time>[] = [];
-    let prevIsUp: boolean | null = null;
 
     for (let i = 0; i < sorted.length; i++) {
       const c = sorted[i];
-      const prevClose = i > 0 ? sorted[i - 1].close : undefined;
-
-      let isUp: boolean;
-      if (Math.abs(c.close - c.open) > eps) {
-        isUp = c.close > c.open;
-      } else if (prevClose !== undefined && Math.abs(c.close - prevClose) > eps) {
-        isUp = c.close > prevClose;
-      } else {
-        isUp = prevIsUp ?? true;
-      }
-      prevIsUp = isUp;
+      const isUp = c.close >= c.open;
 
       const pointColor = isUp ? up : down;
       cd.push({

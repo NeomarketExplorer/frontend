@@ -14,11 +14,57 @@ export type OrderType = z.infer<typeof OrderTypeSchema>;
 export interface OrderParams {
   tokenId: string;
   side: OrderSide;
-  price: number; // In cents (1-99)
+  price: number; // In cents (1-99), may be fractional for sub-cent tick sizes
   size: number; // Number of shares
   orderType?: OrderType;
   expiration?: number; // Unix timestamp for GTD orders
   negRisk?: boolean; // True for multi-outcome markets (uses different exchange contract)
+}
+
+/** Per-market constraints from CLOB /markets/{conditionId}. All optional — falls back to defaults. */
+export interface MarketConstraints {
+  /** Minimum tick size as a decimal (e.g. 0.01 = 1c, 0.001 = 0.1c). Default 0.01. */
+  tickSize?: number;
+  /** Minimum order size in shares. Default 5. */
+  minOrderSize?: number;
+}
+
+// Polymarket CLOB enforces a minimum order size (in shares) for submission.
+// When violated, the API returns errors like:
+// "Size (3) lower than the minimum: 5"
+export const MIN_ORDER_SHARES = 5;
+export const SHARE_STEP = 0.01; // CLOB supports max 2 decimals for conditional token amount
+export const USDC_STEP = 0.0001; // CLOB supports max 4 decimals for USDC amount
+
+/** Default tick size (1 cent = 0.01) */
+export const DEFAULT_TICK_SIZE = 0.01;
+
+/**
+ * Convert a tick size (decimal, e.g. 0.001) to cents.
+ * 0.01 → 1c, 0.001 → 0.1c
+ */
+export function tickSizeToCents(tickSize: number): number {
+  return tickSize * 100;
+}
+
+/**
+ * Snap a price (in cents) to the nearest valid tick.
+ * E.g. tickSize=0.001 (0.1c) → snaps to nearest 0.1c
+ */
+export function snapToTick(priceCents: number, tickSize: number): number {
+  const tickCents = tickSizeToCents(tickSize);
+  return Math.round(priceCents / tickCents) * tickCents;
+}
+
+/**
+ * Get the number of decimal places for the price input (in cents) based on tick size.
+ * tickSize=0.01 → 0 decimals (whole cents), tickSize=0.001 → 1 decimal (0.1c)
+ */
+export function tickSizePriceDecimals(tickSize: number): number {
+  const tickCents = tickSizeToCents(tickSize);
+  if (tickCents >= 1) return 0;
+  // Count decimals: 0.1 → 1, 0.01 → 2, etc.
+  return Math.max(0, Math.ceil(-Math.log10(tickCents + 1e-15)));
 }
 
 export interface SignedOrder {
@@ -47,30 +93,45 @@ export interface OrderResult {
  * Calculate order amounts based on price and size.
  *
  * Uses integer arithmetic to avoid floating-point precision errors.
- * Price is in cents (1-99), USDC has 6 decimals.
- * 1 cent = 0.01 USDC = 10_000 base units (0.01 * 1e6).
+ * Price is in cents (1-99, possibly fractional for sub-cent tick sizes).
+ * USDC has 6 decimals (1 USDC = 1_000_000 base units).
+ * Conditional tokens have 6 decimals (1 share = 1_000_000 base units).
  *
- * For BUY: pay (price * size * 10000) USDC base units, receive (size * 1e6) shares
- * For SELL: pay (size * 1e6) shares, receive (price * size * 10000) USDC base units
+ * For BUY: pay USDC base units, receive shares base units
+ * For SELL: pay shares base units, receive USDC base units
  */
 export function calculateOrderAmounts(
   price: number,
   size: number,
   side: OrderSide
-): { makerAmount: number; takerAmount: number } {
-  // Round to avoid any residual floating-point error from fractional sizes
-  const costBaseUnits = Math.round(price * size * 10_000);
-  const sizeBaseUnits = Math.round(size * 1_000_000);
+): { makerAmount: string; takerAmount: string } {
+  // CLOB validates amount precision:
+  // - Conditional token amount (shares): max 2 decimals => base units multiple of 10_000
+  // - USDC amount: max 4 decimals => base units multiple of 100
+  //
+  // We operate in integer math (BigInt) to avoid float drift and to guarantee multiples.
+  const sharesInt = BigInt(Math.round(size * 100)); // shares * 100 (2 decimals)
+
+  // Token base units: 1 share = 1_000_000 units, but we only allow 0.01 share steps => 10_000 units.
+  const sharesBaseUnits = sharesInt * 10_000n;
+
+  // Price may be fractional cents (e.g. 50.5c for 0.001 tick markets).
+  // Convert to integer at 0.1c precision (price * 10) to stay in BigInt math.
+  // USDC base units = (priceCents / 100) * size * 1_000_000
+  //                  = (priceTenths / 1000) * (sharesInt / 100) * 1_000_000
+  //                  = priceTenths * sharesInt * 10
+  const priceTenths = BigInt(Math.round(price * 10)); // cents * 10
+  const usdcBaseUnits = priceTenths * sharesInt * 10n;
 
   if (side === 'BUY') {
     return {
-      makerAmount: costBaseUnits,
-      takerAmount: sizeBaseUnits,
+      makerAmount: usdcBaseUnits.toString(),
+      takerAmount: sharesBaseUnits.toString(),
     };
   } else {
     return {
-      makerAmount: sizeBaseUnits,
-      takerAmount: costBaseUnits,
+      makerAmount: sharesBaseUnits.toString(),
+      takerAmount: usdcBaseUnits.toString(),
     };
   }
 }
@@ -99,8 +160,8 @@ export function buildOrderStruct(
     signer: maker,
     taker: '0x0000000000000000000000000000000000000000',
     tokenId: params.tokenId,
-    makerAmount: makerAmount.toString(),
-    takerAmount: takerAmount.toString(),
+    makerAmount,
+    takerAmount,
     expiration,
     nonce,
     feeRateBps,
@@ -182,27 +243,52 @@ export function createOrderTypedData(
 }
 
 /**
- * Validate order parameters before submission
+ * Validate order parameters before submission.
+ * Accepts optional per-market constraints from CLOB metadata.
  */
-export function validateOrderParams(params: OrderParams): { valid: boolean; errors: string[] } {
+export function validateOrderParams(
+  params: OrderParams,
+  constraints?: MarketConstraints,
+): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+  const tickSize = constraints?.tickSize ?? DEFAULT_TICK_SIZE;
+  const minOrderSize = constraints?.minOrderSize ?? MIN_ORDER_SHARES;
+  const tickCents = tickSizeToCents(tickSize);
+  const priceDecimals = tickSizePriceDecimals(tickSize);
 
   if (!params.tokenId) {
     errors.push('Token ID is required');
   }
 
-  if (params.price < 1 || params.price > 99) {
-    errors.push('Price must be between 1 and 99 cents');
-  } else if (!Number.isInteger(params.price)) {
-    errors.push('Price must be a whole number of cents');
+  if (params.price < tickCents || params.price > 99) {
+    errors.push(`Price must be between ${tickCents} and 99 cents`);
+  } else {
+    // Validate price aligns to tick size
+    const snapped = snapToTick(params.price, tickSize);
+    if (Math.abs(params.price - snapped) > 1e-9) {
+      errors.push(
+        priceDecimals === 0
+          ? 'Price must be a whole number of cents'
+          : `Price must be in ${tickCents} cent increments`
+      );
+    }
   }
 
   if (params.size <= 0) {
     errors.push('Size must be positive');
   }
 
-  if (params.size < 1) {
-    errors.push('Minimum order size is 1 share');
+  if (params.size < minOrderSize) {
+    errors.push(`Minimum order size is ${minOrderSize} shares`);
+  }
+
+  // CLOB: conditional token amount supports max 2 decimals.
+  const scaled = params.size * 100;
+  if (Number.isFinite(scaled)) {
+    const rounded = Math.round(scaled);
+    if (Math.abs(scaled - rounded) > 1e-8) {
+      errors.push('Size must be in 0.01 share increments');
+    }
   }
 
   return {

@@ -17,7 +17,16 @@ import {
   useMarketPositions,
 } from '@/hooks';
 import { useTradingStore, useWalletStore } from '@/stores';
-import { calculateOrderEstimate, walkOrderbookDepth } from '@app/trading';
+import {
+  calculateOrderEstimate,
+  walkOrderbookDepth,
+  MIN_ORDER_SHARES,
+  DEFAULT_TICK_SIZE,
+  tickSizeToCents,
+  tickSizePriceDecimals,
+  snapToTick,
+  type MarketConstraints,
+} from '@app/trading';
 import { isYesOutcome, isNoOutcome, type OutcomeEntry } from '@/lib/outcomes';
 import { usePrivyAvailable } from '@/providers/privy-provider';
 
@@ -29,6 +38,10 @@ interface TradePanelProps {
   clobMarketLoaded: boolean;
   acceptingOrders: boolean;
   conditionId: string | null;
+  /** CLOB minimum_tick_size (decimal, e.g. 0.01 or 0.001). Falls back to DEFAULT_TICK_SIZE. */
+  tickSize?: number;
+  /** CLOB minimum_order_size (shares). Falls back to MIN_ORDER_SHARES. */
+  minOrderSize?: number;
 }
 
 export function TradePanel({
@@ -39,6 +52,8 @@ export function TradePanel({
   clobMarketLoaded,
   acceptingOrders,
   conditionId,
+  tickSize,
+  minOrderSize,
 }: TradePanelProps) {
   const privyAvailable = usePrivyAvailable();
   const { data: orderbook } = useOrderbook(tokenId);
@@ -64,6 +79,8 @@ export function TradePanel({
       clobMarketLoaded={clobMarketLoaded}
       acceptingOrders={acceptingOrders}
       conditionId={conditionId}
+      tickSize={tickSize}
+      minOrderSize={minOrderSize}
     />
   );
 }
@@ -133,6 +150,8 @@ function TradePanelInner({
   clobMarketLoaded,
   acceptingOrders,
   conditionId,
+  tickSize: tickSizeProp,
+  minOrderSize: minOrderSizeProp,
 }: {
   outcomes: OutcomeEntry[];
   tokenId: string | null;
@@ -142,7 +161,16 @@ function TradePanelInner({
   clobMarketLoaded: boolean;
   acceptingOrders: boolean;
   conditionId: string | null;
+  tickSize?: number;
+  minOrderSize?: number;
 }) {
+  // Per-market constraints (fall back to hardcoded defaults)
+  const effectiveTickSize = tickSizeProp ?? DEFAULT_TICK_SIZE;
+  const effectiveMinShares = minOrderSizeProp ?? MIN_ORDER_SHARES;
+  const tickCents = tickSizeToCents(effectiveTickSize);
+  const priceDecimals = tickSizePriceDecimals(effectiveTickSize);
+  const priceStep = tickCents; // input step in cents
+  const constraints: MarketConstraints = { tickSize: effectiveTickSize, minOrderSize: effectiveMinShares };
   const { orderForm, setOrderSide, setOrderPrice, setOrderSize, setOrderMode } = useTradingStore();
   const { isConnected } = useWalletStore();
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
@@ -182,6 +210,7 @@ function TradePanelInner({
   ) ?? null;
 
   const sellableSize = selectedPosition?.size ?? (onChainTokenBalance > 0 ? onChainTokenBalance : 0);
+  const sellableMax = Math.floor(sellableSize * 100) / 100; // max 2 decimals (CLOB constraint)
 
   const isMarket = orderForm.mode === 'market';
   const size = parseFloat(orderForm.size) || 0;
@@ -240,11 +269,12 @@ function TradePanelInner({
   const insufficientBalance = isConnected && orderForm.side === 'BUY' && effectiveBalance < estimatedCost && estimatedCost > 0;
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
   const insufficientPosition = isConnected && orderForm.side === 'SELL' && size > 0 && sellableSize > 0 && size > sellableSize;
+  const belowMinSize = isConnected && size > 0 && size < effectiveMinShares;
 
   const handlePlaceOrder = () => {
     if (placeOrder.isPending) return;
     if (!tokenId || !price || !size) return;
-    placeOrder.mutate({ tokenId, side: orderForm.side, price, size, orderType: 'GTC', negRisk });
+    placeOrder.mutate({ tokenId, side: orderForm.side, price, size, orderType: 'GTC', negRisk, constraints });
   };
 
   return (
@@ -358,14 +388,24 @@ function TradePanelInner({
           </div>
         ) : (
           <div>
-            <label className="text-xs font-medium mb-1 block">Price (c)</label>
+            <label className="text-xs font-medium mb-1 block">
+              Price ({priceDecimals === 0 ? 'c' : `${tickCents}c step`})
+            </label>
             <Input
               type="number"
-              placeholder="50"
-              min="1"
+              placeholder={priceDecimals === 0 ? '50' : '50.0'}
+              min={String(tickCents)}
               max="99"
+              step={String(priceStep)}
               value={orderForm.price}
               onChange={(e) => setOrderPrice(e.target.value)}
+              onBlur={() => {
+                const raw = parseFloat(orderForm.price);
+                if (!Number.isFinite(raw) || raw <= 0) return;
+                const snapped = snapToTick(raw, effectiveTickSize);
+                const clamped = Math.max(tickCents, Math.min(99, snapped));
+                setOrderPrice(clamped.toFixed(priceDecimals));
+              }}
               className="h-8 text-xs"
             />
           </div>
@@ -392,20 +432,26 @@ function TradePanelInner({
               <button
                 type="button"
                 className="text-[0.65rem] text-muted-foreground hover:text-[var(--foreground)] font-mono transition-colors"
-                onClick={() => setOrderSize(sellableSize.toString())}
+                onClick={() => setOrderSize(sellableMax.toFixed(2))}
               >
-                {sellableSize.toFixed(2)} <span className="text-[var(--accent)]">MAX</span>
+                {sellableMax.toFixed(2)} <span className="text-[var(--accent)]">MAX</span>
               </button>
             )}
           </div>
           <Input
             type="number"
             placeholder="100"
-            min="1"
+            min={String(effectiveMinShares)}
+            step="0.01"
             value={orderForm.size}
             onChange={(e) => setOrderSize(e.target.value)}
             className="h-8 text-xs"
           />
+          <div className="mt-1 flex items-center justify-between">
+            <span className="font-mono text-[0.65rem] text-muted-foreground">
+              Min: {effectiveMinShares} shares
+            </span>
+          </div>
         </div>
 
         <div className="bg-muted/50 rounded-lg p-2 text-xs space-y-1">
@@ -433,6 +479,12 @@ function TradePanelInner({
             <div className="flex justify-between pt-1 border-t border-border/50">
               <span className="text-negative">Insufficient position</span>
               <span className="text-negative">{sellableSize.toFixed(2)} shares</span>
+            </div>
+          )}
+          {isConnected && belowMinSize && (
+            <div className="flex justify-between pt-1 border-t border-border/50">
+              <span className="text-negative">Order too small</span>
+              <span className="text-negative">Min {effectiveMinShares} shares</span>
             </div>
           )}
         </div>
@@ -491,7 +543,7 @@ function TradePanelInner({
             className="w-full min-h-[40px] text-xs"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || noLiquidity || (!isMarket && !price)}
+            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || belowMinSize || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
             {placeOrder.isPending ? (

@@ -174,24 +174,6 @@ export async function searchMarkets(query: string, limit = 20): Promise<IndexerM
   return res.data;
 }
 
-export async function getMarketHistory(id: string, interval: '1h' | '6h' | '1d' | '1w' | 'max' = '1w') {
-  const searchParams = new URLSearchParams();
-  searchParams.set('interval', interval);
-  const res = await fetchIndexer<{ data: Array<{ tokenId: string; timestamp: string; price: number }>; interval: string }>(
-    `/markets/${id}/history?${searchParams}`
-  );
-  return res.data;
-}
-
-export async function getMarketTrades(id: string, limit = 50) {
-  const searchParams = new URLSearchParams();
-  searchParams.set('limit', limit.toString());
-  const res = await fetchIndexer<{ data: Array<{ id: string; side: string; price: number; size: number; timestamp: string }> }>(
-    `/markets/${id}/trades?${searchParams}`
-  );
-  return res.data;
-}
-
 export async function getStats(): Promise<IndexerStats> {
   return fetchIndexer<IndexerStats>('/stats');
 }

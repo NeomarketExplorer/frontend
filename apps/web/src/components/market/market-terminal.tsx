@@ -152,6 +152,8 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
                 clobMarketLoaded={!clobMarketLoading && !!clobMarket}
                 acceptingOrders={clobMarket?.accepting_orders ?? true}
                 conditionId={market?.conditionId ?? null}
+                tickSize={clobMarket?.minimum_tick_size}
+                minOrderSize={clobMarket?.minimum_order_size}
               />
             </div>
             {/* Orderbook — fills remaining height */}
@@ -233,6 +235,8 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
               clobMarketLoaded={!clobMarketLoading && !!clobMarket}
               acceptingOrders={clobMarket?.accepting_orders ?? true}
               conditionId={market?.conditionId ?? null}
+              tickSize={clobMarket?.minimum_tick_size}
+              minOrderSize={clobMarket?.minimum_order_size}
             />
           </TabsContent>
           <TabsContent value="book" className="flex-1 min-h-0 mt-0 data-[state=inactive]:hidden">

@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSignTypedData, useWallets } from '@privy-io/react-auth';
 import {
   type OrderParams,
+  type MarketConstraints,
   type SignTypedDataFn,
   buildOrderStruct,
   validateOrderParams,
@@ -80,9 +81,10 @@ export function usePlaceOrder(options?: UseOrderOptions) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: OrderParams) => {
+    mutationFn: async (params: OrderParams & { constraints?: MarketConstraints }) => {
       // 1. Validate params
-      const validation = validateOrderParams(params);
+      const { constraints, ...orderParams } = params;
+      const validation = validateOrderParams(orderParams, constraints);
       if (!validation.valid) {
         throw new Error(validation.errors.join(', '));
       }
