@@ -106,6 +106,7 @@ export default function RootLayout({
                     <div className="hidden sm:flex items-center gap-0.5">
                       <NavLink href="/events" label="Events" />
                       <NavLink href="/markets" label="Markets" />
+                      <NavLink href="/opportunities" label="Opportunities" />
                       <NavLink href="/categories" label="Categories" />
                       <NavLink href="/portfolio" label="Portfolio" />
                       <NavLink href="/leaderboard" label="Leaderboard" />
@@ -123,6 +124,7 @@ export default function RootLayout({
               <MobileNav>
                 <NavLink href="/events" label="Events" />
                 <NavLink href="/markets" label="Markets" />
+                <NavLink href="/opportunities" label="Opportunities" />
                 <NavLink href="/categories" label="Categories" />
                 <NavLink href="/portfolio" label="Portfolio" />
                 <NavLink href="/leaderboard" label="Leaderboard" />
