@@ -8,16 +8,17 @@ import type { Activity } from '@app/api';
 
 type IntervalOption = '1W' | '1M' | '3M' | 'ALL';
 
-interface IntervalConfig {
+interface IntervalDef {
+  label: IntervalOption;
   interval: string;
-  from: string | undefined;
+  daysBack: number | undefined;
 }
 
-const INTERVAL_OPTIONS: { label: IntervalOption; config: IntervalConfig }[] = [
-  { label: '1W', config: { interval: '1h', from: daysAgo(7) } },
-  { label: '1M', config: { interval: '6h', from: daysAgo(30) } },
-  { label: '3M', config: { interval: '1d', from: daysAgo(90) } },
-  { label: 'ALL', config: { interval: '1d', from: undefined } },
+const INTERVAL_DEFS: IntervalDef[] = [
+  { label: '1W', interval: '1h', daysBack: 7 },
+  { label: '1M', interval: '6h', daysBack: 30 },
+  { label: '3M', interval: '1d', daysBack: 90 },
+  { label: 'ALL', interval: '1d', daysBack: undefined },
 ];
 
 function daysAgo(days: number): string {
@@ -39,10 +40,14 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
 
-  const intervalConfig = INTERVAL_OPTIONS.find((o) => o.label === selectedInterval)!.config;
+  const intervalDef = INTERVAL_DEFS.find((o) => o.label === selectedInterval)!;
+  const fromDate = useMemo(
+    () => (intervalDef.daysBack != null ? daysAgo(intervalDef.daysBack) : undefined),
+    [intervalDef.daysBack],
+  );
   const { data: history, isLoading, isError } = usePortfolioHistory(
-    intervalConfig.interval,
-    intervalConfig.from,
+    intervalDef.interval,
+    fromDate,
   );
 
   const hasClickHouseData = !isError && history?.snapshots && history.snapshots.length > 0;
@@ -76,13 +81,9 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
 
   const height = 200;
 
+  // Create chart once on mount, tear down on unmount
   useEffect(() => {
-    if (!chartContainerRef.current || chartData.length === 0) return;
-
-    const isPositive = valueChange?.isPositive ?? true;
-    const lineColor = isPositive ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
-    const areaTopColor = isPositive ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
-    const areaBottomColor = isPositive ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.0)';
+    if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -113,12 +114,7 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
       handleScale: { mouseWheel: true, pinch: true },
     });
 
-    chartRef.current = chart;
-
     const areaSeries = chart.addSeries(AreaSeries, {
-      lineColor,
-      topColor: areaTopColor,
-      bottomColor: areaBottomColor,
       lineWidth: 2,
       priceFormat: {
         type: 'custom',
@@ -126,10 +122,8 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
       },
     });
 
+    chartRef.current = chart;
     seriesRef.current = areaSeries;
-
-    areaSeries.setData(chartData);
-    chart.timeScale().fitContent();
 
     function handleResize() {
       if (chartContainerRef.current) {
@@ -142,16 +136,25 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
     return () => {
       window.removeEventListener('resize', handleResize);
       chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, [chartData, valueChange?.isPositive]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Update data when it changes
+  // Update series data and colors when data or trend direction changes
   useEffect(() => {
-    if (seriesRef.current && chartData.length > 0) {
-      seriesRef.current.setData(chartData);
-      chartRef.current?.timeScale().fitContent();
-    }
-  }, [chartData]);
+    if (!seriesRef.current || chartData.length === 0) return;
+
+    const isPositive = valueChange?.isPositive ?? true;
+    seriesRef.current.applyOptions({
+      lineColor: isPositive ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)',
+      topColor: isPositive ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+      bottomColor: isPositive ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.0)',
+    });
+    seriesRef.current.setData(chartData);
+    chartRef.current?.timeScale().fitContent();
+  }, [chartData, valueChange?.isPositive]);
 
   const hasActivities = activities && activities.length > 0;
   const hasTrades = hasActivities && activities.some((a) => a.type === 'trade' && a.value != null);
@@ -209,7 +212,7 @@ export function PortfolioChart({ address: _address, currentValue, activities, cl
         </div>
         {/* Interval selector */}
         <div className="flex items-center gap-1 mt-2">
-          {INTERVAL_OPTIONS.map((option) => (
+          {INTERVAL_DEFS.map((option) => (
             <button
               key={option.label}
               onClick={() => setSelectedInterval(option.label)}

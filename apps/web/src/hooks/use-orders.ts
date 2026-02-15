@@ -309,25 +309,34 @@ export function useCancelOrder(options?: UseOrderOptions) {
         throw new Error('CLOB credentials not available');
       }
 
-      // L2 headers for DELETE /order/{id}
+      // L2 headers for DELETE /order with body
+      const cancelBody = JSON.stringify({ orderID: orderId });
       const l2Headers = await signClobRequest(
         credentials,
         address,
         'DELETE',
-        `/order/${orderId}`
+        '/order',
+        cancelBody
       );
 
-      const res = await fetchClob(`/order/${orderId}`, {
+      const res = await fetchClob('/order', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           ...l2Headers,
         },
+        body: cancelBody,
       });
 
       if (!res.ok) {
         const error = await res.json().catch(() => ({ message: 'Failed to cancel order' }));
         throw new Error(error.message || 'Failed to cancel order');
+      }
+
+      const result = await res.json().catch(() => ({}));
+      const notCanceled = result.not_canceled ?? {};
+      if (Object.keys(notCanceled).length > 0) {
+        throw new Error(notCanceled[orderId] || 'Order could not be cancelled');
       }
 
       return orderId;
@@ -384,7 +393,8 @@ export function useOpenOrders(params?: { market?: string; assetId?: string }) {
 
       if (!res.ok) return [];
       const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      // CLOB may return bare array or {data: [...]} wrapper
+      return Array.isArray(data) ? data : (data?.data ?? []);
     },
     enabled: !!address && !!credentials,
     refetchInterval: 10_000,

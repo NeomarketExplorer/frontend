@@ -214,7 +214,7 @@ export function usePositions() {
  * Uses sizeThreshold=-1 to get ALL positions including zero-size,
  * then filters for ones with realized_pnl !== 0 or size === 0 and market closed.
  */
-export function useResolvedPositions() {
+export function useResolvedPositions({ enabled = true }: { enabled?: boolean } = {}) {
   const address = useWalletStore((state) => state.address);
 
   return useQuery({
@@ -223,9 +223,9 @@ export function useResolvedPositions() {
       if (!address) return [];
       // Fetch all positions including zero-size ones
       const allPositions = await dataClient.getPositions(address, -1);
-      // Filter for resolved: size=0 with non-zero realized PnL (fully closed out positions)
+      // Filter for resolved: size=0 with any realized PnL (including break-even at $0)
       const resolved = allPositions.filter(
-        (p) => p.size === 0 && p.realized_pnl != null && p.realized_pnl !== 0
+        (p) => p.size === 0 && p.realized_pnl != null
       );
       const enriched = await enrichPositionsWithMarketData(resolved);
       // Also include open positions in closed markets
@@ -243,7 +243,7 @@ export function useResolvedPositions() {
       }
       return result;
     },
-    enabled: !!address,
+    enabled: !!address && enabled,
     staleTime: 60 * 1000,
     refetchInterval: 120 * 1000,
   });

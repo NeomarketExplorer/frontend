@@ -270,6 +270,9 @@ function TradePanelInner({
   const noLiquidity = isMarket && ((orderForm.side === 'BUY' && bestAsk === 0) || (orderForm.side === 'SELL' && bestBid === 0));
   const insufficientPosition = isConnected && orderForm.side === 'SELL' && size > 0 && sellableSize > 0 && size > sellableSize;
   const belowMinSize = isConnected && size > 0 && size < effectiveMinShares;
+  // CLOB rejects marketable orders (that fill immediately) under $1 total value
+  const orderValue = price > 0 && size > 0 ? (price / 100) * size : 0;
+  const belowMinDollar = isConnected && isMarket && orderValue > 0 && orderValue < 1;
 
   const handlePlaceOrder = () => {
     if (placeOrder.isPending) return;
@@ -487,6 +490,12 @@ function TradePanelInner({
               <span className="text-negative">Min {effectiveMinShares} shares</span>
             </div>
           )}
+          {isConnected && belowMinDollar && (
+            <div className="flex justify-between pt-1 border-t border-border/50">
+              <span className="text-negative">Below $1 minimum</span>
+              <span className="text-negative">${orderValue.toFixed(2)}</span>
+            </div>
+          )}
         </div>
 
         {/* Position */}
@@ -543,7 +552,7 @@ function TradePanelInner({
             className="w-full min-h-[40px] text-xs"
             size="lg"
             variant={orderForm.side === 'BUY' ? 'positive' : 'negative'}
-            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || belowMinSize || noLiquidity || (!isMarket && !price)}
+            disabled={!isConnected || !clobMarketLoaded || !tokenId || !size || placeOrder.isPending || insufficientBalance || insufficientPosition || belowMinSize || belowMinDollar || noLiquidity || (!isMarket && !price)}
             onClick={handlePlaceOrder}
           >
             {placeOrder.isPending ? (

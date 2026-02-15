@@ -33,8 +33,10 @@ function useOrderbookFlash(orderbook: OrderbookPanelProps['orderbook']) {
         const old = prevBids[i];
         if (!old) {
           map.set(`bid:${i}`, 'accent');
-        } else if (cur.price !== old.price || cur.size !== old.size) {
-          map.set(`bid:${i}`, cur.price > old.price ? 'positive' : cur.price < old.price ? 'negative' : 'positive');
+        } else if (cur.price !== old.price) {
+          map.set(`bid:${i}`, cur.price > old.price ? 'positive' : 'negative');
+        } else if (cur.size !== old.size) {
+          map.set(`bid:${i}`, 'accent');
         }
       }
       const prevAsks = prev.asks;
@@ -44,8 +46,10 @@ function useOrderbookFlash(orderbook: OrderbookPanelProps['orderbook']) {
         const old = prevAsks[i];
         if (!old) {
           map.set(`ask:${i}`, 'accent');
-        } else if (cur.price !== old.price || cur.size !== old.size) {
-          map.set(`ask:${i}`, cur.price < old.price ? 'positive' : cur.price > old.price ? 'negative' : 'negative');
+        } else if (cur.price !== old.price) {
+          map.set(`ask:${i}`, cur.price < old.price ? 'positive' : 'negative');
+        } else if (cur.size !== old.size) {
+          map.set(`ask:${i}`, 'accent');
         }
       }
     }
