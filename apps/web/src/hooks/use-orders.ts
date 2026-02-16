@@ -41,26 +41,12 @@ const CTF_BALANCE_OF_ABI = [
   },
 ] as const;
 
-// Route through our proxy to avoid CORS issues with custom POLY_* headers
-const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
-const PROXY_CLOB_API_URL = '/api/clob';
+// All CLOB requests go through our proxy to avoid CORS issues with POLY_* headers.
+// Direct browser→CLOB is blocked by Cloudflare/CORS for mutating requests.
+const CLOB_API_URL = '/api/clob';
 
 async function fetchClob(path: string, init: RequestInit) {
-  const method = (init.method ?? 'GET').toUpperCase();
-
-  if (method !== 'GET') {
-    // Mutating requests (POST/DELETE): try direct only, never retry.
-    // Retrying could duplicate orders if the first request succeeded server-side
-    // but failed client-side (e.g. CORS). Proxy is blocked by Cloudflare anyway.
-    return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
-  }
-
-  // GET requests: prefer direct CLOB, fallback to proxy on CORS/network errors.
-  try {
-    return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
-  } catch {
-    return await fetch(`${PROXY_CLOB_API_URL}${path}`, init);
-  }
+  return await fetch(`${CLOB_API_URL}${path}`, init);
 }
 
 interface UseOrderOptions {
