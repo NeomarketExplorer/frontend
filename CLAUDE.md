@@ -372,6 +372,8 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Event page: CLOB-verified market status grouping (Live / In Review / Resolved)
 - Event page: all-time volume, 24h volume, expiry date on header and market cards
 - Market page: `useMarket` auto-refreshes every 60s (prices stay current)
+- Structured data (JSON-LD for events using Schema.org Event type)
+- Reusable dialog/modal component (Radix Dialog)
 
 ## What's Not Working Yet
 
@@ -450,7 +452,7 @@ This is the critical path. Nothing else matters if users can't trade.
 | 8.3 | ~~Open Graph + Twitter Cards~~ | **DONE** — Per-page OG type/url/images, Twitter cards with market images |
 | 8.4 | ~~Sitemap + robots.txt~~ | **DONE** — Dynamic `sitemap.ts` from indexer events/markets, `robots.ts` |
 | 8.5 | ~~Custom not-found page~~ | **DONE** — Terminal-aesthetic 404 with glass-card, colored dots, animated prompt |
-| 8.6 | Structured data | JSON-LD for events (Schema.org Event type). Helps search engines understand market content. |
+| 8.6 | ~~Structured data~~ | **DONE** — `EventJsonLd` component in `events/[id]/page.tsx` outputs Schema.org Event JSON-LD |
 
 ---
 
@@ -465,7 +467,7 @@ This is the critical path. Nothing else matters if users can't trade.
 | 9.3 | ~~Mobile optimization~~ | **DONE** — Responsive charts, touch-friendly trade panel, collapsible sections, mobile search |
 | 9.4 | ~~New user onboarding~~ | **DROPPED** — The platform should be intuitive enough to not need onboarding. If users need a tutorial, the UX has failed. |
 | 9.5 | ~~Loading/error polish~~ | **DONE** — Skeleton screens for homepage cards, orderbook, trades, orders, chart, portfolio tabs |
-| 9.6 | Modal/dialog component | Build reusable dialog (Radix Dialog). Use for: order confirmation, approval prompt, position details, settings. |
+| 9.6 | ~~Modal/dialog component~~ | **DONE** — Radix Dialog in `packages/ui/src/components/dialog.tsx` (reusable for order confirmation, approval prompt, etc.) |
 
 ---
 
