@@ -41,12 +41,23 @@ const CTF_BALANCE_OF_ABI = [
   },
 ] as const;
 
-// All CLOB requests go through our proxy to avoid CORS issues with POLY_* headers.
-// Direct browser→CLOB is blocked by Cloudflare/CORS for mutating requests.
-const CLOB_API_URL = '/api/clob';
+// CLOB requests go direct from the browser so the user's IP is used (geo-restriction).
+// Datacenter/server IPs are blocked by Polymarket, so proxy won't work for trading.
+// Fallback to proxy only for GET requests that hit CORS issues.
+const DIRECT_CLOB_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_URL = '/api/clob';
 
 async function fetchClob(path: string, init: RequestInit) {
-  return await fetch(`${CLOB_API_URL}${path}`, init);
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method === 'GET') {
+    try {
+      return await fetch(`${DIRECT_CLOB_URL}${path}`, init);
+    } catch {
+      return await fetch(`${PROXY_CLOB_URL}${path}`, init);
+    }
+  }
+  // POST/DELETE: direct only — user's IP must be used for geo-compliance
+  return await fetch(`${DIRECT_CLOB_URL}${path}`, init);
 }
 
 interface UseOrderOptions {

@@ -17,15 +17,16 @@ import {
 } from '@app/trading';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 
-// Route through our proxy to avoid CORS issues with custom POLY_* headers
-const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
-const PROXY_CLOB_API_URL = '/api/clob';
+// CLOB requests go direct from the browser so the user's IP is used (geo-restriction).
+// Polymarket blocks datacenter IPs, so proxy won't work for auth/trading.
+const DIRECT_CLOB_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_URL = '/api/clob';
 
 async function fetchClob(path: string, init: RequestInit) {
   try {
-    return await fetch(`${DIRECT_CLOB_API_URL}${path}`, init);
+    return await fetch(`${DIRECT_CLOB_URL}${path}`, init);
   } catch {
-    return await fetch(`${PROXY_CLOB_API_URL}${path}`, init);
+    return await fetch(`${PROXY_CLOB_URL}${path}`, init);
   }
 }
 

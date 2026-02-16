@@ -295,10 +295,12 @@ GET /events              # ?limit=&offset=&search=&active=&closed=&sort=&order=
 GET /events/:id          # Event detail with nested markets
 GET /markets             # ?limit=&offset=&search=&active=&closed=&category=&sort=&order=
 GET /markets/:id         # Market detail
-GET /markets/:id/history # ?interval=1h|6h|1d|1w|max
-GET /markets/:id/trades  # ?limit=
 GET /markets/search      # ?q=&limit=
 ```
+
+Note: market charts and market trades panels are now sourced from ClickHouse
+(`GET /market/candles` and `GET /trades`) via the Next.js proxy at `/api/clickhouse/...`,
+not from indexer market history/trades endpoints.
 
 ## Polymarket API Reference
 
@@ -363,6 +365,7 @@ subscribe: book, last_trade_price, price_change, tick_size_change
 - Resolved/closed positions tab in portfolio (entry price, resolution price, realized P&L)
 - P&L breakdown (cost basis, current value, unrealized gain/loss per position)
 - Portfolio value chart (Lightweight Charts AreaSeries, cumulative from trade activity)
+- Position redemption (`redeemPositions()` on CTF contract, "Claim" button, estimated payout, toast)
 - Price flash animations (green/red flash on orderbook + midpoint price changes)
 - Skeleton loading screens (homepage cards, orderbook, trades, orders, chart, portfolio)
 - Candlestick chart (OHLCV from ClickHouse `/market/candles`, replaces old area chart)
@@ -429,7 +432,7 @@ This is the critical path. Nothing else matters if users can't trade.
 | # | Task | Details |
 |---|------|---------|
 | 7.1 | ~~Resolved positions tab~~ | **DONE** — Open/Resolved sub-tabs, resolved positions with entry price, resolution price, Won/Lost badge |
-| 7.2 | Position redemption | Call CTF contract `redeemPositions()` for resolved winning positions. Show "Claim" button with estimated payout. Toast on success. |
+| 7.2 | ~~Position redemption~~ | **DONE** — `redeemPositions()` on CTF contract for resolved winning positions. "Claim" button with estimated payout. Toast on success. |
 | 7.3 | ~~Closed positions history~~ | **DONE** — Merged into resolved tab with realized P&L, market outcome |
 | 7.4 | ~~P&L breakdown~~ | **DONE** — Cost basis, current value, unrealized gain/loss per position in open positions table |
 | 7.5 | ~~Portfolio value chart~~ | **DONE** — `portfolio-chart.tsx` using Lightweight Charts AreaSeries, cumulative from trade activity |
@@ -460,7 +463,7 @@ This is the critical path. Nothing else matters if users can't trade.
 | 9.1 | ~~Price flash animations~~ | **DONE** — Green/red flash on orderbook rows + midpoint text glow via CSS animations + React key re-trigger |
 | 9.2 | Live orderbook depth | Visual depth chart alongside the orderbook. Real-time updates via existing WebSocket subscription. |
 | 9.3 | ~~Mobile optimization~~ | **DONE** — Responsive charts, touch-friendly trade panel, collapsible sections, mobile search |
-| 9.4 | New user onboarding | First-time flow: connect wallet → show balance → guide to first trade. Dismissable, not blocking. |
+| 9.4 | ~~New user onboarding~~ | **DROPPED** — The platform should be intuitive enough to not need onboarding. If users need a tutorial, the UX has failed. |
 | 9.5 | ~~Loading/error polish~~ | **DONE** — Skeleton screens for homepage cards, orderbook, trades, orders, chart, portfolio tabs |
 | 9.6 | Modal/dialog component | Build reusable dialog (Radix Dialog). Use for: order confirmation, approval prompt, position details, settings. |
 
@@ -555,6 +558,29 @@ These tasks are independent of Sprint 5 and can be done anytime.
 
 ---
 
+## CLOB API: Direct vs Proxy (Geo-Restriction)
+
+**CRITICAL**: All CLOB API calls from the browser (auth, orders, balance) MUST go **direct to
+`https://clob.polymarket.com`** using the user's IP. Polymarket geo-blocks restricted regions
+AND datacenter IPs. If you route CLOB requests through the Next.js proxy (`/api/clob`), the
+Hetzner server IP gets blocked → "trading restricted in your region" even with VPN.
+
+```
+Browser (user's IP/VPN) → clob.polymarket.com   ← CORRECT for auth/orders/balance
+Browser → /api/clob → clob.polymarket.com       ← WRONG: server IP gets geo-blocked
+```
+
+The `/api/clob` proxy exists only as a fallback for GET requests that hit CORS issues (e.g.
+orderbook, midpoint). It must NEVER be the primary path for auth or trading endpoints.
+
+Files that make direct CLOB calls (DO NOT change to proxy):
+- `use-orders.ts` — order submission (POST /order), cancellation (DELETE /order)
+- `use-clob-auth.ts` — credential derivation (GET /auth/derive-api-key, POST /auth/api-key)
+- `use-balance.ts` — balance/allowance (GET /balance-allowance)
+
+Server-side CLOB calls (these are fine through proxy or direct — server IP is OK for reads):
+- `events/[id]/page.tsx` — market status verification (server component, not client)
+
 ## Don't
 
 - Don't set NEXT_PUBLIC_* as runtime env vars — they must be build-time
@@ -568,6 +594,7 @@ These tasks are independent of Sprint 5 and can be done anytime.
 - Don't use CMD-SHELL in Docker health checks — use CMD array format
 - Don't hardcode the indexer URL — use INDEXER_URL env var
 - Don't store user L2 credentials in localStorage — memory only (Zustand)
+- Don't route CLOB auth/trading requests through the /api/clob proxy — user's IP must be used for geo-compliance. Datacenter IPs are blocked by Polymarket
 
 ## Do
 

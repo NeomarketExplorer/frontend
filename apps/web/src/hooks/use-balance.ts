@@ -15,9 +15,10 @@ import { usePublicClient } from 'wagmi';
 import { useClobCredentialStore, useWalletStore } from '@/stores';
 import { useEffect } from 'react';
 
-// Prefer direct CLOB to avoid Cloudflare blocks on server IPs; fallback to proxy on CORS/network errors.
-const DIRECT_CLOB_API_URL = 'https://clob.polymarket.com';
-const PROXY_CLOB_API_URL = '/api/clob';
+// CLOB requests go direct from the browser so the user's IP is used (geo-restriction).
+// Polymarket blocks datacenter IPs, so proxy won't work for auth/trading.
+const DIRECT_CLOB_URL = 'https://clob.polymarket.com';
+const PROXY_CLOB_URL = '/api/clob';
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
 const CTF_EXCHANGE = CHAIN_CONFIG.polygon.ctfExchange;
 const NEG_RISK_CTF_EXCHANGE = CHAIN_CONFIG.polygon.negRiskCtfExchange;
@@ -98,7 +99,7 @@ async function fetchBalanceAllowance(
     const headers = await signClobRequest(credentials, address, 'GET', signPath);
     let res: Response;
     try {
-      res = await fetch(`${DIRECT_CLOB_API_URL}${requestUrl}`, {
+      res = await fetch(`${DIRECT_CLOB_URL}${requestUrl}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +107,7 @@ async function fetchBalanceAllowance(
         },
       });
     } catch {
-      res = await fetch(`${PROXY_CLOB_API_URL}${requestUrl}`, {
+      res = await fetch(`${PROXY_CLOB_URL}${requestUrl}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
