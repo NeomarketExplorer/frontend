@@ -22,6 +22,7 @@ const CandleChart = dynamic(() => import('@/components/candle-chart').then(m => 
 import { CompactHeader } from '@/components/market/compact-header';
 import { TradePanel } from '@/components/market/trade-panel';
 import { OrderbookPanel } from '@/components/market/orderbook-panel';
+import { DepthChart } from '@/components/market/depth-chart';
 import { BottomTabs } from '@/components/market/bottom-tabs';
 
 type TimeInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
@@ -214,6 +215,7 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
             <TabsTrigger value="chart" className="text-xs">Chart</TabsTrigger>
             <TabsTrigger value="trade" className="text-xs">Trade</TabsTrigger>
             <TabsTrigger value="book" className="text-xs">Orderbook</TabsTrigger>
+            <TabsTrigger value="depth" className="text-xs">Depth</TabsTrigger>
           </TabsList>
           <TabsContent value="chart" className="flex-1 min-h-0 flex flex-col mt-0 data-[state=inactive]:hidden">
             <div className="flex-1 min-h-0">
@@ -250,6 +252,13 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
               midpoint={selectedMidpoint ?? null}
               isLoading={orderbookLoading}
               isError={orderbookError}
+            />
+          </TabsContent>
+          <TabsContent value="depth" className="flex-1 min-h-0 mt-0 p-2 data-[state=inactive]:hidden">
+            <DepthChart
+              bids={orderbook?.bids ?? []}
+              asks={orderbook?.asks ?? []}
+              midpoint={selectedMidpoint}
             />
           </TabsContent>
         </Tabs>

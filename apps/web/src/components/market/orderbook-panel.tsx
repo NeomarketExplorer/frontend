@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@app/ui';
+import { DepthChart } from '@/components/market/depth-chart';
 
 type FlashType = 'positive' | 'negative' | 'accent';
 
@@ -93,6 +94,7 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
   const containerRef = useRef<HTMLDivElement>(null);
   const [levelCount, setLevelCount] = useState(12);
   const [showTotal, setShowTotal] = useState(true);
+  const [view, setView] = useState<'list' | 'depth'>('list');
   const { flashMap, flashId } = useOrderbookFlash(orderbook);
   const { flash: midFlash, flashMidId } = useMidpointFlash(midpoint);
 
@@ -169,72 +171,106 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
       <div className="px-3 py-2 border-b border-[var(--card-border)] flex items-center justify-between">
         <span className="text-sm font-semibold">Orderbook</span>
-      </div>
-
-      {/* Header row */}
-      <div className="px-3 py-1 flex text-[0.6rem] font-mono text-muted-foreground uppercase tracking-wider">
-        <span className="flex-1">Price</span>
-        <span className="flex-1 text-right">Size</span>
-        {showTotal && <span className="flex-1 text-right">Total</span>}
-      </div>
-
-      {/* Asks (reversed — lowest ask at bottom near midpoint) */}
-      <div className="flex-1 flex flex-col justify-end overflow-hidden px-1">
-        {asks.slice().reverse().map((level, idx) => {
-          const i = asks.length - 1 - idx;
-          const flash = flashMap.get(`ask:${i}`);
-          const depthWidth = (level.cumSize / maxCumulative) * 100;
-          return (
-            <div
-              key={`ask-${i}-${flash ? flashId : 'stable'}`}
-              className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
-            >
-              <div
-                className="absolute inset-y-0 right-0 bg-[var(--danger)]/8"
-                style={{ width: `${depthWidth}%` }}
-              />
-              <span className="flex-1 text-negative relative z-10">{level.price.toFixed(2)}</span>
-              <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
-              {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Midpoint */}
-      {midpoint != null && (
-        <div className="px-3 py-1.5 border-y border-border/50 flex items-center justify-center gap-2 text-xs font-mono bg-[var(--background-secondary)]">
-          <span className="text-muted-foreground text-[0.6rem]">MID</span>
-          <span
-            key={`mid-${midFlash ? flashMidId : 'stable'}`}
-            className={`font-semibold ${midFlash ? `flash-text-${midFlash}` : ''}`}
+        <div className="flex gap-0.5">
+          <button
+            onClick={() => setView('list')}
+            className={`text-[0.6rem] font-mono px-1.5 py-0.5 rounded transition-colors ${
+              view === 'list'
+                ? 'bg-[var(--accent)] text-[var(--background)]'
+                : 'text-muted-foreground hover:text-[var(--foreground)]'
+            }`}
           >
-            {(midpoint * 100).toFixed(1)}c
-          </span>
+            LIST
+          </button>
+          <button
+            onClick={() => setView('depth')}
+            className={`text-[0.6rem] font-mono px-1.5 py-0.5 rounded transition-colors ${
+              view === 'depth'
+                ? 'bg-[var(--accent)] text-[var(--background)]'
+                : 'text-muted-foreground hover:text-[var(--foreground)]'
+            }`}
+          >
+            DEPTH
+          </button>
         </div>
-      )}
-
-      {/* Bids */}
-      <div className="flex-1 flex flex-col overflow-hidden px-1">
-        {bids.map((level, i) => {
-          const flash = flashMap.get(`bid:${i}`);
-          const depthWidth = (level.cumSize / maxCumulative) * 100;
-          return (
-            <div
-              key={`bid-${i}-${flash ? flashId : 'stable'}`}
-              className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
-            >
-              <div
-                className="absolute inset-y-0 right-0 bg-[var(--success)]/8"
-                style={{ width: `${depthWidth}%` }}
-              />
-              <span className="flex-1 text-positive relative z-10">{level.price.toFixed(2)}</span>
-              <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
-              {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
-            </div>
-          );
-        })}
       </div>
+
+      {view === 'depth' ? (
+        <div className="flex-1 min-h-0 p-2">
+          <DepthChart
+            bids={orderbook?.bids ?? []}
+            asks={orderbook?.asks ?? []}
+            midpoint={midpoint}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Header row */}
+          <div className="px-3 py-1 flex text-[0.6rem] font-mono text-muted-foreground uppercase tracking-wider">
+            <span className="flex-1">Price</span>
+            <span className="flex-1 text-right">Size</span>
+            {showTotal && <span className="flex-1 text-right">Total</span>}
+          </div>
+
+          {/* Asks (reversed — lowest ask at bottom near midpoint) */}
+          <div className="flex-1 flex flex-col justify-end overflow-hidden px-1">
+            {asks.slice().reverse().map((level, idx) => {
+              const i = asks.length - 1 - idx;
+              const flash = flashMap.get(`ask:${i}`);
+              const depthWidth = (level.cumSize / maxCumulative) * 100;
+              return (
+                <div
+                  key={`ask-${i}-${flash ? flashId : 'stable'}`}
+                  className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
+                >
+                  <div
+                    className="absolute inset-y-0 right-0 bg-[var(--danger)]/8"
+                    style={{ width: `${depthWidth}%` }}
+                  />
+                  <span className="flex-1 text-negative relative z-10">{level.price.toFixed(2)}</span>
+                  <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+                  {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Midpoint */}
+          {midpoint != null && (
+            <div className="px-3 py-1.5 border-y border-border/50 flex items-center justify-center gap-2 text-xs font-mono bg-[var(--background-secondary)]">
+              <span className="text-muted-foreground text-[0.6rem]">MID</span>
+              <span
+                key={`mid-${midFlash ? flashMidId : 'stable'}`}
+                className={`font-semibold ${midFlash ? `flash-text-${midFlash}` : ''}`}
+              >
+                {(midpoint * 100).toFixed(1)}c
+              </span>
+            </div>
+          )}
+
+          {/* Bids */}
+          <div className="flex-1 flex flex-col overflow-hidden px-1">
+            {bids.map((level, i) => {
+              const flash = flashMap.get(`bid:${i}`);
+              const depthWidth = (level.cumSize / maxCumulative) * 100;
+              return (
+                <div
+                  key={`bid-${i}-${flash ? flashId : 'stable'}`}
+                  className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
+                >
+                  <div
+                    className="absolute inset-y-0 right-0 bg-[var(--success)]/8"
+                    style={{ width: `${depthWidth}%` }}
+                  />
+                  <span className="flex-1 text-positive relative z-10">{level.price.toFixed(2)}</span>
+                  <span className="flex-1 text-right text-muted-foreground relative z-10">{level.size.toFixed(0)}</span>
+                  {showTotal && <span className="flex-1 text-right text-muted-foreground/60 relative z-10">{level.cumSize.toFixed(0)}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
