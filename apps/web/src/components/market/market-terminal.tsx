@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Image from 'next/image';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@app/ui';
 import {
   useMarket,
@@ -181,7 +182,7 @@ export function MarketTerminal({ id }: MarketTerminalProps) {
         <div className="px-3 py-2 border-b border-[var(--card-border)] bg-[var(--background-secondary)]/50 shrink-0">
           <div className="flex items-start gap-3">
             {market.image && (
-              <img src={market.image} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+              <Image src={market.image} alt="" width={40} height={40} className="rounded object-cover flex-shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <h1 className="text-base font-bold leading-tight line-clamp-2">{market.question}</h1>

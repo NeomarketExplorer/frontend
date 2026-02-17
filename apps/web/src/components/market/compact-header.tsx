@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { Badge, Button } from '@app/ui';
 import { formatVolume } from '@/lib/indexer';
 import type { MarketStats } from '@/lib/clickhouse';
@@ -37,10 +38,12 @@ export function CompactHeader({
     <div className="flex items-center gap-3 px-3 py-2 border-b border-[var(--card-border)] bg-[var(--background-secondary)]/50 min-h-[48px]">
       {/* Image */}
       {image && (
-        <img
+        <Image
           src={image}
           alt=""
-          className="w-8 h-8 rounded object-cover flex-shrink-0"
+          width={32}
+          height={32}
+          className="rounded object-cover flex-shrink-0"
         />
       )}
 
