@@ -13,7 +13,12 @@ import {
 } from '@/hooks';
 import { useTradingStore } from '@/stores';
 import { buildOutcomeEntries, isYesOutcome, isNoOutcome } from '@/lib/outcomes';
-import { CandleChart } from '@/components/candle-chart';
+import dynamic from 'next/dynamic';
+
+const CandleChart = dynamic(() => import('@/components/candle-chart').then(m => m.CandleChart), {
+  ssr: false,
+  loading: () => <div className="flex-1 bg-muted/20 animate-pulse" />,
+});
 import { CompactHeader } from '@/components/market/compact-header';
 import { TradePanel } from '@/components/market/trade-panel';
 import { OrderbookPanel } from '@/components/market/orderbook-panel';

@@ -5,7 +5,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConnectButton } from '@/components/connect-button';
 import { AuthGuard } from '@/components/auth-guard';
-import { PortfolioChart } from '@/components/portfolio-chart';
+import dynamic from 'next/dynamic';
+
+const PortfolioChart = dynamic(() => import('@/components/portfolio-chart').then(m => m.PortfolioChart), {
+  ssr: false,
+  loading: () => <div className="h-[300px] bg-muted/20 animate-pulse rounded" />,
+});
 import { Skeleton, toast } from '@app/ui';
 import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, useRedeemPosition, type EnrichedPosition } from '@/hooks';
 import { useWalletStore } from '@/stores';
