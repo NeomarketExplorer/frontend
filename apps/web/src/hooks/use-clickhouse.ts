@@ -26,8 +26,9 @@ export function usePortfolioHistory(interval?: string, from?: string) {
     queryKey: ['ch-portfolio', address, interval, from],
     queryFn: () => getPortfolioHistory(address!, interval, from),
     enabled: !!address,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    gcTime: 600_000,
   });
 }
 
@@ -39,8 +40,9 @@ export function useUserStats(address?: string | null) {
     queryKey: ['ch-user-stats', user],
     queryFn: () => getUserStats(user!),
     enabled: !!user,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    gcTime: 600_000,
   });
 }
 
@@ -49,8 +51,9 @@ export function useMarketStats(conditionId?: string | null) {
     queryKey: ['ch-market-stats', conditionId],
     queryFn: () => getMarketStats({ conditionId: conditionId! }),
     enabled: !!conditionId,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    gcTime: 600_000,
   });
 }
 
@@ -58,8 +61,9 @@ export function useLeaderboard(sort?: string, period?: string) {
   return useQuery<LeaderboardResponse>({
     queryKey: ['ch-leaderboard', sort, period],
     queryFn: () => getLeaderboard(sort, undefined, period),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 300_000,
+    gcTime: 600_000,
   });
 }
 
@@ -79,8 +83,9 @@ export function useLeaderboardFiltered(opts: {
   return useQuery<LeaderboardResponse>({
     queryKey: ['ch-leaderboard', sort, period, category, eventId, limit],
     queryFn: () => getLeaderboard(sort, limit, period, category, eventId),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 120_000,
+    refetchInterval: 300_000,
+    gcTime: 600_000,
   });
 }
 
@@ -96,6 +101,7 @@ export function useOnChainTrades(
     enabled: !!tokenId,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    gcTime: 600_000,
   });
 }
 
@@ -113,8 +119,9 @@ export function useMarketCandles(
         interval,
       }),
     enabled: !!conditionId,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    gcTime: 600_000,
   });
 }
 
@@ -136,6 +143,7 @@ export function useLeaderboardExplain(
         limit,
       }),
     enabled: !!user,
-    staleTime: 30_000,
+    staleTime: 120_000,
+    gcTime: 600_000,
   });
 }
