@@ -401,34 +401,20 @@ function OpenPositionsTable({
               const pnlDollar = unrealizedPnl != null ? formatPnlDollar(unrealizedPnl) : null;
               const stale = formatPriceUpdatedAt(position.price_updated_at_ms);
               const showEstimateTag = !hasCurrentPrice;
-              const marketLink = position.marketId
-                ? `/market/${position.marketId}`
-                : null;
+              const marketLink = `/market/${position.marketId || position.condition_id}`;
+              const marketTitle = position.marketQuestion || `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`;
 
               return (
                 <tr
                   key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
                   className="market-row-item animate-fade-up group cursor-pointer"
                   style={{ animationDelay: `${i * 40}ms` }}
-                  onClick={marketLink ? () => router.push(marketLink) : undefined}
+                  onClick={() => router.push(marketLink)}
                 >
                   <td>
-                    {position.marketQuestion && marketLink ? (
-                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
-                        {position.marketQuestion}
-                      </Link>
-                    ) : position.marketQuestion ? (
-                      <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
-                        {position.marketQuestion}
-                      </span>
-                    ) : (
-                      <div>
-                        <span className="text-sm font-medium text-[var(--foreground-muted)]">Unknown Market</span>
-                        <span className="block font-mono text-[0.6rem] text-[var(--foreground-muted)] opacity-60">
-                          {position.condition_id.slice(0, 10)}...{position.condition_id.slice(-6)}
-                        </span>
-                      </div>
-                    )}
+                    <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                      {marketTitle}
+                    </Link>
                   </td>
                   <td className="text-center">
                     <span
@@ -547,9 +533,8 @@ function ResolvedPositionsTable({
               const realizedPnl = position.realized_pnl ?? 0;
               const pnlDollar = formatPnlDollar(realizedPnl);
               const isWin = resolutionPrice != null && resolutionPrice > 0.5;
-              const marketLink = position.marketId
-                ? `/market/${position.marketId}`
-                : null;
+              const marketLink = `/market/${position.marketId || position.condition_id}`;
+              const marketTitle = position.marketQuestion || `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`;
 
               // Claimable: market closed, winning outcome, still holds tokens
               const isClaimable = position.marketClosed && isWin && position.size > 0;
@@ -560,25 +545,12 @@ function ResolvedPositionsTable({
                   key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
                   className="market-row-item animate-fade-up group cursor-pointer"
                   style={{ animationDelay: `${i * 40}ms` }}
-                  onClick={marketLink ? () => router.push(marketLink) : undefined}
+                  onClick={() => router.push(marketLink)}
                 >
                   <td>
-                    {position.marketQuestion && marketLink ? (
-                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
-                        {position.marketQuestion}
-                      </Link>
-                    ) : position.marketQuestion ? (
-                      <span className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors">
-                        {position.marketQuestion}
-                      </span>
-                    ) : (
-                      <div>
-                        <span className="text-sm font-medium text-[var(--foreground-muted)]">Unknown Market</span>
-                        <span className="block font-mono text-[0.6rem] text-[var(--foreground-muted)] opacity-60">
-                          {position.condition_id.slice(0, 10)}...{position.condition_id.slice(-6)}
-                        </span>
-                      </div>
-                    )}
+                    <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                      {marketTitle}
+                    </Link>
                   </td>
                   <td className="text-center">
                     <span

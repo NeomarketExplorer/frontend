@@ -10,7 +10,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
-import { searchMarkets } from '@/lib/indexer';
+import { getMarkets } from '@/lib/indexer';
 import { getPositions as getChPositions, type Position as ClickHousePosition } from '@/lib/clickhouse';
 
 // Route through proxy to avoid CORS
@@ -141,11 +141,9 @@ async function enrichPositionsWithMarketData(
   if (unenrichedIds.length > 0) {
     const lookups = unenrichedIds.map(async (conditionId) => {
       try {
-        const results = await searchMarkets(conditionId, 1);
-        const match = results.find(
-          (m) => m.conditionId?.toLowerCase() === conditionId.toLowerCase()
-        );
-        if (match) {
+        const result = await getMarkets({ conditionId, limit: 1 });
+        const match = result.data?.[0];
+        if (match && match.conditionId?.toLowerCase() === conditionId.toLowerCase()) {
           marketMap[conditionId] = {
             question: match.question,
             id: String(match.id),

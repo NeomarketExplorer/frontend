@@ -36,12 +36,22 @@ export function useMarkets(params: {
 }
 
 /**
- * Fetch a single market by ID
+ * Fetch a single market by ID (numeric indexer ID) or conditionId (hex).
+ * If a hex conditionId is passed, falls back to /markets?conditionId=... lookup.
  */
 export function useMarket(id: string | null) {
+  const isConditionId = id ? /^0x[0-9a-fA-F]{40,}$/.test(id) : false;
+
   return useQuery({
     queryKey: marketKeys.detail(id ?? ''),
-    queryFn: () => (id ? getMarket(id) : null),
+    queryFn: async () => {
+      if (!id) return null;
+      if (isConditionId) {
+        const res = await getMarkets({ conditionId: id, limit: 1 });
+        return res.data?.[0] ?? null;
+      }
+      return getMarket(id);
+    },
     enabled: !!id,
     staleTime: 30_000,
     refetchInterval: 60_000,

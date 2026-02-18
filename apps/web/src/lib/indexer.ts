@@ -141,6 +141,7 @@ export async function getMarkets(params?: {
   closed?: boolean;
   category?: string;
   event_category?: string;
+  conditionId?: string;
   sort?: 'volume' | 'volume_24hr' | 'liquidity' | 'created_at';
   order?: 'asc' | 'desc';
   search?: string;
@@ -153,6 +154,7 @@ export async function getMarkets(params?: {
   if (params?.closed !== undefined) searchParams.set('closed', params.closed.toString());
   if (params?.category) searchParams.set('category', params.category);
   if (params?.event_category) searchParams.set('event_category', params.event_category);
+  if (params?.conditionId) searchParams.set('conditionId', params.conditionId);
   if (params?.sort) searchParams.set('sort', params.sort);
   if (params?.order) searchParams.set('order', params.order);
   if (params?.search) searchParams.set('search', params.search);
