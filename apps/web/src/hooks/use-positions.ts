@@ -106,7 +106,9 @@ async function enrichPositionsWithMarketData(
       const markets = await res.json();
       const list = Array.isArray(markets) ? markets : [];
       for (const m of list) {
-        if (m.condition_id) {
+        // Gamma returns camelCase `conditionId`, not snake_case `condition_id`
+        const cid = m.conditionId ?? m.condition_id;
+        if (cid) {
           let outcomePrices: number[] = [];
           try {
             if (typeof m.outcomePrices === 'string') {
@@ -117,7 +119,7 @@ async function enrichPositionsWithMarketData(
           } catch {
             // ignore parse errors
           }
-          marketMap[m.condition_id] = {
+          marketMap[cid] = {
             question: m.question ?? m.title ?? '',
             id: String(m.id ?? ''),
             slug: m.slug ?? '',
