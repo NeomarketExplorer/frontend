@@ -30,8 +30,13 @@ async function fetchEvents(
     ...(category ? { category } : {}),
   });
 
+  // Filter out events with no trading activity (dead/placeholder events)
+  const liveEvents = result.data.filter(
+    (e) => e.volume > 0 || e.volume24hr > 0 || e.liquidity > 0
+  );
+
   return {
-    data: result.data,
+    data: liveEvents,
     hasMore: result.pagination.hasMore,
   };
 }
@@ -246,13 +251,17 @@ function EventCard({ event, sortField }: { event: IndexerEvent; sortField: SortF
           <h3 className="flex-1 font-medium text-sm text-[var(--foreground)] line-clamp-2 group-hover:text-[var(--accent)] transition-colors">
             {event.title}
           </h3>
-          <span className="shrink-0 tag tag-success">
-            <span className="relative flex h-1 w-1 mr-1">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1 w-1 bg-[var(--success)]"></span>
+          {event.volume24hr > 0 ? (
+            <span className="shrink-0 tag tag-success">
+              <span className="relative flex h-1 w-1 mr-1">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1 w-1 bg-[var(--success)]"></span>
+              </span>
+              Live
             </span>
-            Live
-          </span>
+          ) : (
+            <span className="shrink-0 tag tag-muted">Idle</span>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
