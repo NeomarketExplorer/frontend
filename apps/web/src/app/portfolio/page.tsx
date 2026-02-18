@@ -334,16 +334,17 @@ function formatPnlDollar(value: number): { text: string; className: string } {
   };
 }
 
-function formatPriceUpdatedAt(ms: number | undefined): { text: string; className: string } {
-  if (!ms || ms <= 0) {
-    return { text: 'Price stale', className: 'text-[var(--danger)]' };
-  }
+function formatPriceUpdatedAt(ms: number | undefined): { text: string; className: string } | null {
+  // No timestamp available — don't show anything (ClickHouse may not have it)
+  if (!ms || ms <= 0) return null;
   const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) {
-    return { text: 'Price stale', className: 'text-[var(--danger)]' };
+  if (Number.isNaN(d.getTime())) return null;
+  const ageMinutes = (Date.now() - d.getTime()) / 60_000;
+  if (ageMinutes > 60) {
+    return { text: `${Math.floor(ageMinutes / 60)}h ago`, className: 'text-[var(--warning, var(--foreground-muted))]' };
   }
   return {
-    text: `Updated ${d.toLocaleString()}`,
+    text: `${Math.floor(ageMinutes)}m ago`,
     className: 'text-[var(--foreground-muted)]',
   };
 }
@@ -443,9 +444,11 @@ function OpenPositionsTable({
                       <span className="font-mono text-sm font-bold">
                         ${currentValue.toFixed(2)}
                       </span>
-                      <span className={`font-mono text-[0.6rem] ${stale.className}`}>
-                        {stale.text}
-                      </span>
+                      {stale && (
+                        <span className={`font-mono text-[0.6rem] ${stale.className}`}>
+                          {stale.text}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="text-right">
