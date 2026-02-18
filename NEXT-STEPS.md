@@ -1,55 +1,55 @@
-# Next Steps — Priority Order
+# Next Steps — Post v1
 
-## Immediate Fixes (Before Beta Testers)
-
-### ~~1. Data API Zod schemas need `.passthrough()`~~ DONE
-Added `.passthrough()` to `PositionSchema` and `ActivitySchema` in `packages/api/src/data/index.ts`.
-
-### ~~2. SELL orders need ERC-1155 approval~~ DONE
-Added `useConditionalTokenApproval(negRisk)` hook. Checks `isApprovedForAll` on CTF contract, prompts `setApprovalForAll` TX. SELL button gated on approval. Supports both regular and neg-risk markets.
-
-### ~~3. MAX button for BUY~~ DONE
-Added BUY MAX button in market page trade panel. Calculates `Math.floor((effectiveBalance - 0.50) / (price / 100))` with $0.50 USDC reserve. Shows alongside the existing SELL MAX button (which fills position size).
-
-### ~~4. Rebrand PolyExplorer -> Neomarket~~ DONE
-Metadata title and header logo changed to "Neomarket" in `layout.tsx`.
+All sprints (5-10) are complete. The frontend is feature-complete for v1.
 
 ---
 
-## ~~Sprint 6 Completion~~ DONE
+## Completed Milestones
 
-### ~~5. Open Orders UI~~ DONE
-Added "Orders" tab to market page and portfolio page. Shows side, price, size, filled, time, and cancel button per order.
+### Sprint 5 — Trading Infrastructure: DONE
+Server-side HMAC signing, L1/L2 auth, order signing + submission, USDC balance/allowance, token approvals.
 
-### ~~6. Order Cancellation UI~~ DONE
-Cancel button per order with confirmation dialog on portfolio page. Toast on success/failure. Uses `useCancelOrder()` hook.
+### Sprint 6 — Order Management: DONE
+Toast notifications, open orders display, order cancellation, error boundaries, tx confirmation UI, balance auto-refresh.
 
-### ~~7. Transaction Confirmation Flow~~ DONE
-Order button shows status progression: "Awaiting signature..." → "Submitting order..." → "Order placed!" with spinner. Auto-refreshes positions 3s after success.
+### Sprint 7 — Portfolio Management: DONE
+Resolved positions tab, position redemption, closed positions, P&L breakdown, portfolio value chart.
+
+### Sprint 8 — Branding & SEO: DONE
+Rebrand to Neomarket, dynamic metadata, OG/Twitter cards, sitemap + robots.txt, structured data (JSON-LD), custom 404.
+
+### Sprint 9 — Real-time & Polish: DONE
+Price flash animations, orderbook depth chart, mobile optimization, skeleton loading, dialog component. (Onboarding skipped by design.)
+
+### Sprint 10 — Performance & DevOps: DONE
+Bundle analyzer + lazy loading, next/image optimization, React Query cache tuning, E2E tests (Playwright), CI pipeline (GitHub Actions), Sentry error monitoring.
 
 ---
 
-## Data Sources — Current vs Future
+## Data Sources — Current Architecture
 
-### Current: Polymarket APIs
 ```
-Positions:  data-api.polymarket.com/positions?user=ADDRESS
-Activity:   data-api.polymarket.com/activity?user=ADDRESS
+# Markets/events/categories browsing (Postgres indexer)
+Markets:    /api/indexer/...
+Events:     /api/indexer/...
+Categories: /api/indexer/...
+
+# Discovery feed (ClickHouse) (expected 404 until ClickHouse API redeploy + tables/MVs exist)
+Discovery:  /api/clickhouse/discover/markets?window=1h|6h|24h|7d&limit=&category=
+
+# Positions (ClickHouse preferred, Data API fallback)
+Positions:  /api/clickhouse/positions?user=ADDRESS
+Fallback:   data-api.polymarket.com/positions?user=ADDRESS
+
+# Charts + trades panels (ClickHouse)
+Candles:    /api/clickhouse/market/candles?conditionId=...&tokenId=...&interval=...
+Trades:     /api/clickhouse/trades?tokenId=...&limit=
+
+# Trading (Polymarket CLOB — direct from browser for geo-compliance)
 Orderbook:  clob.polymarket.com/book?token_id=TOKEN
-Trades:     clob.polymarket.com/trades?token_id=TOKEN  (may need L2 auth)
 Balance:    clob.polymarket.com/balance-allowance (L2 auth)
-Markets:    Indexer at 138.201.57.139:3005
+Orders:     clob.polymarket.com/order (L2 + builder headers)
 ```
-
-### Future: ClickHouse Database
-When the ClickHouse DB is ready, we can:
-- Query trades directly (bypasses CLOB `/trades` auth requirement)
-- Get historical position data
-- Build portfolio value charts over time
-- Calculate custom analytics (volume by market, P&L over time)
-- Power the trades tab on market pages (currently empty)
-
-**Migration plan**: Add ClickHouse query endpoints to the indexer API, then update frontend hooks to use them. The indexer already runs at `:3005` and has a proxy at `/api/indexer/`.
 
 ---
 
@@ -57,56 +57,29 @@ When the ClickHouse DB is ready, we can:
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| ~~SELL orders fail (no ERC-1155 approval)~~ | ~~HIGH~~ | DONE — implemented |
-| ~~Data API schema changes break parsing~~ | ~~MEDIUM~~ | DONE — `.passthrough()` added |
+| Non-neg-risk market signing fails | MEDIUM | Test a simple YES/NO binary market end-to-end |
 | Limit orders rejected by CLOB | MEDIUM | Test with real limit orders, handle error messages |
-| Non-neg-risk market signing fails | MEDIUM | Test a simple YES/NO binary market |
-| Position data delayed after trade | LOW | Data API indexes from chain; may take 30-60s |
-| WebSocket connection drops silently | LOW | Test real-time updates, add reconnection indicator |
+| Discovery feed 404s | LOW | ClickHouse API needs redeploy + new tables/MVs + category sync |
+| WebSocket reconnection edge cases | LOW | Connection logic exists, reconnection indicator could be added |
 | CLOB credentials expire mid-session | LOW | 401 handler already clears + triggers re-derivation |
-| Gas price spike on Polygon | LOW | User pays ~$0.02/tx normally, spikes rare |
 
 ---
 
-## Feature Backlog
+## Future Improvements (Post v1)
 
-### Sprint 7 — Portfolio Management (ON HOLD — needs ClickHouse)
-- Resolved positions tab (query by resolved market IDs)
-- Position redemption (`redeemPositions()` on CTF contract)
-- Closed positions history
-- Per-market P&L breakdown
-- Portfolio value chart over time
+### UX Enhancements
+- Copy trading / strategy following
+- Advanced order types (stop-loss, take-profit)
+- Push notifications for position updates
+- Portfolio sharing / social features
 
-### ~~Sprint 8 — Branding & SEO~~ DONE
-- [x] Dynamic `generateMetadata()` per page (events/[id], market/[id] via layout, events, markets)
-- [x] Open Graph / Twitter Cards (root + per-page, title template)
-- [x] Sitemap + robots.txt (dynamic sitemap from indexer, robots blocks /api)
-- [x] Structured data (JSON-LD Schema.org Event on event pages)
-- [x] Custom not-found.tsx
-- [x] SVG favicon with Neomarket branding
+### Infrastructure
+- ClickHouse materialized views for faster candle queries (see CANDLE_PERF_FIX.md)
+- Indexer `active` flag fix for 42K+ markets (see INDEXER_ACTIVE_FLAG_FIX.md)
+- WebSocket reconnection indicator in UI
+- Rate limiting on `/api/polymarket/sign` endpoint
 
-### ~~Sprint 9 — Real-time & Polish~~ PARTIAL
-- [ ] Price flash animations on WebSocket updates
-- [ ] Live orderbook depth chart
-- [ ] Mobile-optimized trade panel
-- [ ] New user onboarding flow
-- [x] Loading skeleton screens (all routes)
-- [x] Dialog component (Radix Dialog exported from UI package)
-
-### ~~Sprint 10 — Performance & DevOps~~ PARTIAL
-- [ ] Bundle analysis + code splitting
-- [ ] E2E tests (Playwright)
-- [x] CI pipeline (GitHub Actions: typecheck + build on push/PR)
-- [x] ESLint configuration (next/core-web-vitals + next/typescript)
-- [ ] Error monitoring (Sentry)
-
----
-
-## Quick Wins (Can Do Anytime)
-
-- [x] Rename PolyExplorer -> Neomarket in metadata/logo
-- [x] Add `.passthrough()` to Data API Zod schemas
-- [x] Add not-found.tsx page
-- [x] Add error.tsx to remaining routes (events, portfolio, profile, markets)
-- [x] Show market search results in NavSearch (parallel events + markets search)
-- [ ] ~~Add Cmd+K shortcut for search~~ (skipped)
+### Data
+- Historical P&L charts (requires ClickHouse ledger)
+- Market correlation analysis
+- Volume analytics dashboard
