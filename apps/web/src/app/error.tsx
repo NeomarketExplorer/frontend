@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import * as Sentry from '@sentry/nextjs';
 import { Button } from '@app/ui';
 
 export default function GlobalError({
@@ -17,6 +18,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error('Unhandled error:', error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

@@ -24,6 +24,7 @@ export const clientEnvSchema = z.object({
     .default('wss://ws-subscriptions-clob.polymarket.com/ws'),
   NEXT_PUBLIC_CHAIN_ID: z.coerce.number().default(137),
   NEXT_PUBLIC_PRIVY_APP_ID: z.string().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 });
 
 // Server-side environment schema (includes secrets)
@@ -47,6 +48,7 @@ export function getClientEnv(): ClientEnv {
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
     NEXT_PUBLIC_CHAIN_ID: process.env.NEXT_PUBLIC_CHAIN_ID,
     NEXT_PUBLIC_PRIVY_APP_ID: process.env.NEXT_PUBLIC_PRIVY_APP_ID,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   };
 
   return clientEnvSchema.parse(env);

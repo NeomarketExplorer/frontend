@@ -29,6 +29,7 @@ out
 coverage
 playwright-report
 test-results
+.keepers.json
 
 # Logs
 *.log
