@@ -1,7 +1,9 @@
 /**
  * TanStack Query hooks for positions and portfolio data.
- * Fetches from Polymarket Data API via /api/data proxy,
- * then enriches positions with market names from Gamma API.
+ *
+ * Enrichment chain:
+ *   1. Gamma API batch lookup (primary — has most Polymarket markets)
+ *   2. Indexer batch lookup by conditionId (fallback — our own indexed copy)
  *
  * Open positions: prefer ClickHouse `/positions?user=...` as source of truth.
  */
@@ -10,7 +12,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createDataClient, type Position } from '@app/api';
 import { useWalletStore } from '@/stores/wallet-store';
-import { getMarkets } from '@/lib/indexer';
+import { getMarkets, type IndexerMarket } from '@/lib/indexer';
 import { getPositions as getChPositions, type Position as ClickHousePosition } from '@/lib/clickhouse';
 
 // Route through proxy to avoid CORS
@@ -84,9 +86,62 @@ interface MarketInfo {
   outcomePrices: number[];
 }
 
+/** Parse a Gamma market object into our MarketInfo shape. */
+function parseGammaMarket(m: Record<string, unknown>): { cid: string; info: MarketInfo } | null {
+  const cid = (m.conditionId ?? m.condition_id) as string | undefined;
+  if (!cid) return null;
+
+  let outcomePrices: number[] = [];
+  try {
+    if (typeof m.outcomePrices === 'string') {
+      outcomePrices = JSON.parse(m.outcomePrices).map(Number);
+    } else if (Array.isArray(m.outcomePrices)) {
+      outcomePrices = (m.outcomePrices as unknown[]).map(Number);
+    }
+  } catch { /* ignore */ }
+
+  let outcomes: string[];
+  if (Array.isArray(m.outcomes)) {
+    outcomes = m.outcomes as string[];
+  } else if (typeof m.outcomes === 'string') {
+    try { outcomes = JSON.parse(m.outcomes); } catch { outcomes = ['Yes', 'No']; }
+  } else {
+    outcomes = ['Yes', 'No'];
+  }
+
+  return {
+    cid,
+    info: {
+      question: (m.question ?? m.title ?? '') as string,
+      id: String(m.id ?? ''),
+      slug: (m.slug ?? '') as string,
+      outcomes,
+      closed: m.closed === true,
+      outcomePrices,
+    },
+  };
+}
+
+/** Parse an IndexerMarket into our MarketInfo shape. */
+function parseIndexerMarket(m: IndexerMarket): MarketInfo {
+  return {
+    question: m.question,
+    id: String(m.id),
+    slug: m.slug ?? '',
+    outcomes: m.outcomes ?? ['Yes', 'No'],
+    closed: m.closed === true,
+    outcomePrices: m.outcomePrices ?? [],
+  };
+}
+
 /**
- * Resolve market names for a set of positions by querying Gamma API.
- * Groups by condition_id, batch-fetches, returns lookup map.
+ * Resolve market metadata for a set of positions.
+ *
+ * Enrichment chain:
+ *   1. Gamma API — batch by condition_ids (primary, most complete)
+ *   2. Indexer — batch by conditionId comma-separated (fallback)
+ *
+ * Both sources are matched by exact conditionId (case-insensitive).
  */
 async function enrichPositionsWithMarketData(
   positions: Position[]
@@ -94,79 +149,56 @@ async function enrichPositionsWithMarketData(
   if (positions.length === 0) return [];
 
   const conditionIds = [...new Set(positions.map((p) => p.condition_id))];
-
-  // Gamma API supports condition_ids param for batch lookup
-  // Fetch through our proxy to avoid CORS
   const marketMap: Record<string, MarketInfo> = {};
+
+  // ── 1. Gamma API (primary) ──────────────────────────────────────────
   try {
     const res = await fetch(
-      `/api/gamma/markets?condition_ids=${conditionIds.join(',')}&limit=100`
+      `/api/gamma/markets?condition_ids=${conditionIds.join(',')}&limit=${conditionIds.length + 10}`
     );
     if (res.ok) {
       const markets = await res.json();
       const list = Array.isArray(markets) ? markets : [];
       for (const m of list) {
-        // Gamma returns camelCase `conditionId`, not snake_case `condition_id`
-        const cid = m.conditionId ?? m.condition_id;
-        if (cid) {
-          let outcomePrices: number[] = [];
-          try {
-            if (typeof m.outcomePrices === 'string') {
-              outcomePrices = JSON.parse(m.outcomePrices).map(Number);
-            } else if (Array.isArray(m.outcomePrices)) {
-              outcomePrices = m.outcomePrices.map(Number);
-            }
-          } catch {
-            // ignore parse errors
-          }
-          marketMap[cid] = {
-            question: m.question ?? m.title ?? '',
-            id: String(m.id ?? ''),
-            slug: m.slug ?? '',
-            outcomes: Array.isArray(m.outcomes)
-              ? m.outcomes
-              : typeof m.outcomes === 'string'
-                ? JSON.parse(m.outcomes)
-                : ['Yes', 'No'],
-            closed: m.closed === true,
-            outcomePrices,
-          };
-        }
+        const parsed = parseGammaMarket(m);
+        if (parsed) marketMap[parsed.cid] = parsed.info;
       }
     }
   } catch {
-    // Enrichment is best-effort — positions still show without names
+    // Gamma unavailable — continue to indexer fallback
   }
 
-  // Secondary fallback: try indexer for any positions not enriched by Gamma
-  const unenrichedIds = conditionIds.filter((id) => !marketMap[id]);
+  // ── 2. Indexer fallback (batch by conditionId) ──────────────────────
+  const unenrichedIds = conditionIds.filter(
+    (id) => !Object.keys(marketMap).some((k) => k.toLowerCase() === id.toLowerCase())
+  );
   if (unenrichedIds.length > 0) {
-    const lookups = unenrichedIds.map(async (conditionId) => {
-      try {
-        const result = await getMarkets({ conditionId, limit: 1 });
-        const match = result.data?.[0];
-        if (match && match.conditionId?.toLowerCase() === conditionId.toLowerCase()) {
-          marketMap[conditionId] = {
-            question: match.question,
-            id: String(match.id),
-            slug: match.slug ?? '',
-            outcomes: match.outcomes ?? ['Yes', 'No'],
-            closed: match.closed === true,
-            outcomePrices: match.outcomePrices ?? [],
-          };
+    try {
+      const result = await getMarkets({
+        conditionId: unenrichedIds.join(','),
+        limit: unenrichedIds.length + 10,
+      });
+      for (const m of result.data) {
+        const cid = m.conditionId;
+        // Only add if it's one we actually asked for (case-insensitive)
+        if (cid && unenrichedIds.some((id) => id.toLowerCase() === cid.toLowerCase())) {
+          marketMap[cid] = parseIndexerMarket(m);
         }
-      } catch {
-        // Indexer lookup failed — continue
       }
-    });
-    await Promise.allSettled(lookups);
+    } catch {
+      // Indexer unavailable — positions still visible, just without metadata
+    }
   }
 
+  // ── Map results to positions ────────────────────────────────────────
   return positions.map((p) => {
-    const market = marketMap[p.condition_id];
+    // Case-insensitive lookup in marketMap
+    const mapKey = Object.keys(marketMap).find(
+      (k) => k.toLowerCase() === p.condition_id.toLowerCase()
+    );
+    const market = mapKey ? marketMap[mapKey] : undefined;
     const outcomes = market?.outcomes ?? ['Yes', 'No'];
     const isClosed = market?.closed ?? false;
-    // For resolved markets, the outcome price is 0 or 1
     const resolutionPrice = isClosed && market?.outcomePrices?.length
       ? (market.outcomePrices[p.outcome_index] ?? null)
       : null;
