@@ -7,8 +7,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createWebSocketManager, type WebSocketMessage, type WebSocketManager } from '@app/api';
 import { orderbookKeys } from './use-orderbook';
 
-// Singleton WebSocket manager
+// Singleton WebSocket manager with ref counting
 let wsManager: WebSocketManager | null = null;
+let wsRefCount = 0;
 
 function getWebSocketManager(): WebSocketManager {
   if (!wsManager) {
@@ -21,6 +22,20 @@ function getWebSocketManager(): WebSocketManager {
   return wsManager;
 }
 
+function acquireWs(): WebSocketManager {
+  wsRefCount++;
+  return getWebSocketManager();
+}
+
+function releaseWs(): void {
+  wsRefCount--;
+  if (wsRefCount <= 0 && wsManager) {
+    wsManager.disconnect();
+    wsManager = null;
+    wsRefCount = 0;
+  }
+}
+
 /**
  * Hook to subscribe to real-time orderbook updates
  */
@@ -31,15 +46,11 @@ export function useRealtimeOrderbook(tokenId: string | null) {
   useEffect(() => {
     if (!tokenId) return;
 
-    const ws = getWebSocketManager();
-
-    // Connect if not already connected
+    const ws = acquireWs();
     ws.connect().catch(console.error);
 
-    // Subscribe to orderbook updates
     unsubscribeRef.current = ws.subscribeToOrderbook([tokenId], (message) => {
       if (message.type === 'book' && message.data) {
-        // Invalidate the orderbook query to refetch with new data
         queryClient.invalidateQueries({
           queryKey: orderbookKeys.token(tokenId),
         });
@@ -48,6 +59,7 @@ export function useRealtimeOrderbook(tokenId: string | null) {
 
     return () => {
       unsubscribeRef.current?.();
+      releaseWs();
     };
   }, [tokenId, queryClient]);
 }
@@ -62,15 +74,11 @@ export function useRealtimePrices(tokenIds: string[]) {
   useEffect(() => {
     if (tokenIds.length === 0) return;
 
-    const ws = getWebSocketManager();
-
-    // Connect if not already connected
+    const ws = acquireWs();
     ws.connect().catch(console.error);
 
-    // Subscribe to price updates
     unsubscribeRef.current = ws.subscribeToPrices(tokenIds, (message) => {
       if (message.type === 'last_trade_price' && message.asset_id) {
-        // Invalidate the midpoint query
         queryClient.invalidateQueries({
           queryKey: orderbookKeys.midpoint(message.asset_id),
         });
@@ -79,6 +87,7 @@ export function useRealtimePrices(tokenIds: string[]) {
 
     return () => {
       unsubscribeRef.current?.();
+      releaseWs();
     };
   }, [tokenIds.join(','), queryClient]);
 }
@@ -99,12 +108,9 @@ export function useWebSocketSubscription(
   useEffect(() => {
     if (assetIds.length === 0) return;
 
-    const ws = getWebSocketManager();
-
-    // Connect if not already connected
+    const ws = acquireWs();
     ws.connect().catch(console.error);
 
-    // Subscribe
     unsubscribeRef.current = ws.subscribe(
       { type, assets_ids: assetIds },
       (message) => onMessageRef.current(message)
@@ -112,6 +118,7 @@ export function useWebSocketSubscription(
 
     return () => {
       unsubscribeRef.current?.();
+      releaseWs();
     };
   }, [type, assetIds.join(',')]);
 }
@@ -121,13 +128,15 @@ export function useWebSocketSubscription(
  */
 export function useWebSocketConnection() {
   const connect = useCallback(() => {
-    const ws = getWebSocketManager();
-    return ws.connect();
+    return getWebSocketManager().connect();
   }, []);
 
   const disconnect = useCallback(() => {
-    const ws = getWebSocketManager();
-    ws.disconnect();
+    if (wsManager) {
+      wsManager.disconnect();
+      wsManager = null;
+      wsRefCount = 0;
+    }
   }, []);
 
   return { connect, disconnect };

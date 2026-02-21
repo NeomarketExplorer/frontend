@@ -268,19 +268,22 @@ export function useResolvedPositions({ enabled = true }: { enabled?: boolean } =
       if (!address) return [];
       // Fetch all positions including zero-size ones
       const allPositions = await dataClient.getPositions(address, -1);
-      // Filter for resolved: size=0 with any realized PnL (including break-even at $0)
       const resolved = allPositions.filter(
         (p) => p.size === 0 && p.realized_pnl != null
       );
-      const enriched = await enrichPositionsWithMarketData(resolved);
-      // Also include open positions in closed markets
-      const openInClosed = (await enrichPositionsWithMarketData(
-        allPositions.filter((p) => p.size > 0)
-      )).filter((p) => p.marketClosed);
+      const open = allPositions.filter((p) => p.size > 0);
+
+      // Single enrichment call for all positions (avoids duplicate API requests)
+      const allToEnrich = [...resolved, ...open];
+      const allEnriched = await enrichPositionsWithMarketData(allToEnrich);
+
+      const enrichedResolved = allEnriched.slice(0, resolved.length);
+      const openInClosed = allEnriched.slice(resolved.length).filter((p) => p.marketClosed);
+
       // Merge and deduplicate by asset
       const seen = new Set<string>();
       const result: EnrichedPosition[] = [];
-      for (const p of [...enriched, ...openInClosed]) {
+      for (const p of [...enrichedResolved, ...openInClosed]) {
         if (!seen.has(p.asset)) {
           seen.add(p.asset);
           result.push(p);
