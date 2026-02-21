@@ -5,6 +5,7 @@
  * Full L2 + builder HMAC authentication
  */
 
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSignTypedData, useWallets } from '@privy-io/react-auth';
 import {
@@ -76,6 +77,17 @@ export function usePlaceOrder(options?: UseOrderOptions) {
   const { address } = useWalletStore();
   const { credentials } = useClobCredentialStore();
   const queryClient = useQueryClient();
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   return useMutation({
     mutationFn: async (params: OrderParams & { constraints?: MarketConstraints }) => {
@@ -218,7 +230,12 @@ export function usePlaceOrder(options?: UseOrderOptions) {
         let pollCount = 0;
         const maxPolls = 15; // 15 × 2s = 30s max
 
-        const poll = setInterval(async () => {
+        // Clear any previous poll (e.g. rapid successive orders)
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+        }
+
+        pollIntervalRef.current = setInterval(async () => {
           pollCount++;
           try {
             if (!publicClient) return;
@@ -242,7 +259,8 @@ export function usePlaceOrder(options?: UseOrderOptions) {
             const settled = Math.abs(realUsdc - preOrderUsdc) > 0.001;
 
             if (settled || pollCount >= maxPolls) {
-              clearInterval(poll);
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
 
               // Write real on-chain balance — corrects any optimistic drift
               useWalletStore.getState().setBalance(realUsdc);
@@ -255,7 +273,8 @@ export function usePlaceOrder(options?: UseOrderOptions) {
           } catch {
             // Network error — keep polling, don't stop early
             if (pollCount >= maxPolls) {
-              clearInterval(poll);
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
               queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
               queryClient.invalidateQueries({ queryKey: ['ctf-balance'] });
               queryClient.invalidateQueries({ queryKey: ['positions'] });
