@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL || 'http://138.201.57.139:3002';
+const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL;
+if (!CLICKHOUSE_URL) throw new Error('CLICKHOUSE_URL env var is required');
 
 export async function GET(
   request: NextRequest,

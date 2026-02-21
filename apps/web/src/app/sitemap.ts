@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 
 const BASE_URL = 'https://neomarket.bet';
-const INDEXER_URL = process.env.INDEXER_URL || 'http://138.201.57.139:3005';
+const INDEXER_URL = process.env.INDEXER_URL;
+if (!INDEXER_URL) throw new Error('INDEXER_URL env var is required');
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages

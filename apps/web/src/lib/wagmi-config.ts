@@ -4,7 +4,7 @@ import { polygon } from 'wagmi/chains';
 export const wagmiConfig = createConfig({
   chains: [polygon],
   transports: {
-    [polygon.id]: http('https://polygon-rpc.com'),
+    [polygon.id]: http('https://polygon.drpc.org'),
   },
   ssr: true,
 });

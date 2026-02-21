@@ -52,8 +52,8 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
               decimals: 18,
             },
             rpcUrls: {
-              default: { http: ['https://polygon-rpc.com'] },
-              public: { http: ['https://polygon-rpc.com'] },
+              default: { http: ['https://polygon.drpc.org'] },
+              public: { http: ['https://polygon.drpc.org'] },
             },
             blockExplorers: {
               default: { name: 'PolygonScan', url: 'https://polygonscan.com' },

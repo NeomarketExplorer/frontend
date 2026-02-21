@@ -12,8 +12,6 @@ export async function GET(
     const search = request.nextUrl.search;
     const url = `${INDEXER_URL}${pathname}${search}`;
 
-    console.log('Proxying to:', url);
-
     const res = await fetch(url, { cache: 'no-store' });
     const contentType = res.headers.get('content-type') ?? '';
     const bodyText = await res.text();

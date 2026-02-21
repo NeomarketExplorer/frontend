@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import { QueryProvider } from '@/providers/query-provider';
 import { PrivyProvider } from '@/providers/privy-provider';
@@ -77,7 +78,7 @@ export default function RootLayout({
                 <NavWrapper>
                   <div className="flex items-center justify-between h-14 gap-4">
                     {/* Logo */}
-                    <a href="/" className="flex items-center gap-2.5 group">
+                    <Link href="/" className="flex items-center gap-2.5 group">
                       <div className="relative w-7 h-7 bg-gradient-to-br from-[var(--accent)] to-[var(--success)] flex items-center justify-center group-hover:glow-accent transition-all duration-300">
                         <svg
                           viewBox="0 0 24 24"
@@ -100,7 +101,7 @@ export default function RootLayout({
                           MARKET
                         </span>
                       </div>
-                    </a>
+                    </Link>
 
                     {/* Desktop Nav */}
                     <div className="hidden sm:flex items-center gap-0.5">
@@ -144,8 +145,8 @@ export default function RootLayout({
 
 function NavLink({ href, label }: { href: string; label: string }) {
   return (
-    <a href={href} className="nav-link">
+    <Link href={href} className="nav-link">
       {label}
-    </a>
+    </Link>
   );
 }

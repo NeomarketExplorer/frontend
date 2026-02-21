@@ -97,7 +97,7 @@ export function CandleChart({
     };
   }, [candleData]);
 
-  // Create chart + series
+  // Create chart + series (once on mount, or when height/fillContainer changes)
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -172,12 +172,6 @@ export function CandleChart({
 
     volumeSeriesRef.current = volumeSeries;
 
-    if (candleData.length > 0) {
-      candleSeries.setData(candleData);
-      volumeSeries.setData(volumeData);
-      chart.timeScale().fitContent();
-    }
-
     // Use ResizeObserver for both fillContainer and normal modes
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -195,10 +189,13 @@ export function CandleChart({
     return () => {
       ro.disconnect();
       chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
     };
-  }, [candleData, volumeData, height, fillContainer]);
+  }, [height, fillContainer]);
 
-  // Update data when it changes
+  // Update data incrementally (no chart recreation)
   useEffect(() => {
     if (candleSeriesRef.current && candleData.length > 0) {
       candleSeriesRef.current.setData(candleData);
