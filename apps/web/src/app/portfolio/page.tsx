@@ -691,7 +691,12 @@ function RedemptionsTab({
   const hasClaimable = claimable.length > 0;
   const hasCompleted = (completedRedemptions?.length ?? 0) > 0;
 
-  if (!hasClaimable && !hasCompleted && !completedLoading) {
+  // Still loading completed redemptions with no pending claims — show skeleton
+  if (!hasClaimable && completedLoading) {
+    return <PositionsLoadingSkeleton />;
+  }
+
+  if (!hasClaimable && !hasCompleted) {
     return (
       <div className="glass-card p-10 text-center">
         <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
