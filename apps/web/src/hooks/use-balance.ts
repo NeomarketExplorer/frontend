@@ -134,13 +134,15 @@ async function fetchBalanceAllowance(
     for (const [key, val] of Object.entries(rawAllowances)) {
       allowances[key.toLowerCase()] = val as string;
     }
-    const ctfAllowance = parseFloat(allowances[CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
-    const negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
-    const negRiskAdapterAllowance = parseFloat(allowances[NEG_RISK_ADAPTER.toLowerCase()] ?? '0') / 1e6;
+    let ctfAllowance = parseFloat(allowances[CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
+    let negRiskAllowance = parseFloat(allowances[NEG_RISK_CTF_EXCHANGE.toLowerCase()] ?? '0') / 1e6;
+    let negRiskAdapterAllowance = parseFloat(allowances[NEG_RISK_ADAPTER.toLowerCase()] ?? '0') / 1e6;
 
     let walletBalance: number | undefined;
     let onChainAllowance: number | undefined;
-    if (balance === 0) {
+    // Fall back to on-chain reads when CLOB returns zero balance OR zero allowances.
+    // CLOB caches internally — fresh on-chain approvals may not reflect immediately.
+    if (balance === 0 || ctfAllowance === 0) {
       try {
         const [onChainBal, onChainAllow] = await Promise.all([
           fetchOnChainBalance(address, client),
@@ -148,6 +150,16 @@ async function fetchBalanceAllowance(
         ]);
         walletBalance = onChainBal;
         onChainAllowance = onChainAllow.ctfAllowance;
+        // Use the higher of CLOB vs on-chain allowance (CLOB may be stale)
+        if (onChainAllow.ctfAllowance > ctfAllowance) {
+          ctfAllowance = onChainAllow.ctfAllowance;
+        }
+        if (onChainAllow.negRiskAllowance > negRiskAllowance) {
+          negRiskAllowance = onChainAllow.negRiskAllowance;
+        }
+        if (onChainAllow.negRiskAdapterAllowance > negRiskAdapterAllowance) {
+          negRiskAdapterAllowance = onChainAllow.negRiskAdapterAllowance;
+        }
       } catch {
         walletBalance = undefined;
         onChainAllowance = undefined;

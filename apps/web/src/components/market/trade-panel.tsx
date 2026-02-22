@@ -541,8 +541,12 @@ function TradePanelInner({
             size="lg"
             disabled={isEnabling}
             onClick={async () => {
-              await enableTrading();
-              toast({ variant: 'success', title: 'Trading enabled' });
+              try {
+                await enableTrading();
+                toast({ variant: 'success', title: 'Trading enabled' });
+              } catch {
+                toast({ variant: 'error', title: 'Failed to enable trading' });
+              }
             }}
           >
             {isEnabling ? 'Enabling Trading...' : 'Enable Trading'}

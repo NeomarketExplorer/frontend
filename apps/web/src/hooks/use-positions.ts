@@ -267,7 +267,7 @@ export function usePositions() {
     },
     enabled: !!address,
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval: () => (typeof document !== 'undefined' && document.hidden ? false : 30_000),
   });
 }
 
@@ -310,7 +310,7 @@ export function useResolvedPositions({ enabled = true }: { enabled?: boolean } =
     },
     enabled: !!address && enabled,
     staleTime: 60 * 1000,
-    refetchInterval: 120 * 1000,
+    refetchInterval: () => (typeof document !== 'undefined' && document.hidden ? false : 60_000),
   });
 }
 
@@ -344,7 +344,7 @@ export function usePortfolio() {
     },
     enabled: !!address,
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval: () => (typeof document !== 'undefined' && document.hidden ? false : 60_000),
   });
 }
 

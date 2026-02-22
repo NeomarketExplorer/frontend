@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { SearchBar } from '@/components/search-bar';
+import { openSearchDialog } from '@/components/search-dialog';
 
 export function NavWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -44,7 +44,21 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 sm:pt-7">
-        <SearchBar />
+        <button
+          onClick={() => openSearchDialog()}
+          className="w-full flex items-center gap-3 px-4 py-3 bg-[var(--card)] border border-[var(--card-border)] text-left hover:border-[var(--accent)] transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-[var(--foreground-muted)] flex-shrink-0" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span className="flex-1 font-mono text-sm text-[var(--foreground-muted)]">
+            Search markets & events...
+          </span>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--foreground-muted)] border border-[var(--card-border)] bg-[var(--background)]">
+            &#8984;K
+          </kbd>
+        </button>
       </div>
       <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-6 sm:pt-6 sm:pb-8">
         {children}

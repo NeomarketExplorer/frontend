@@ -132,7 +132,7 @@ export function useTokenApproval(_negRisk = false): UseTokenApprovalResult {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Approval failed';
       setError(msg);
-      return null;
+      throw err;
     } finally {
       setIsApproving(false);
     }

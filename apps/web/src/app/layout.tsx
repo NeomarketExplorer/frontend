@@ -6,6 +6,7 @@ import { PrivyProvider } from '@/providers/privy-provider';
 import { ClobAuthProvider } from '@/providers/clob-auth-provider';
 import { WagmiProvider } from '@/providers/wagmi-provider';
 import { ConnectButton } from '@/components/connect-button';
+import { SearchTrigger, SearchDialog } from '@/components/search-dialog';
 import { LayoutShell, NavWrapper, MobileNav } from '@/components/layout-shell';
 import './globals.css';
 
@@ -113,8 +114,9 @@ export default function RootLayout({
                       <NavLink href="/leaderboard" label="Leaderboard" />
                     </div>
 
-                    {/* Connect */}
+                    {/* Search + Connect */}
                     <div className="flex items-center gap-3">
+                      <SearchTrigger />
                       <ConnectButton />
                     </div>
                   </div>
@@ -130,6 +132,8 @@ export default function RootLayout({
                 <NavLink href="/portfolio" label="Portfolio" />
                 <NavLink href="/leaderboard" label="Leaderboard" />
               </MobileNav>
+
+              <SearchDialog />
 
               <LayoutShell>
                 {children}

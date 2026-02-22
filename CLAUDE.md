@@ -45,7 +45,8 @@ NEXT_PUBLIC_PRIVY_APP_ID=              # from https://dashboard.privy.io
 
 ### Server-side only (runtime, NEVER expose to client)
 ```env
-INDEXER_URL=http://138.201.57.139:3005
+INDEXER_URL=                           # Required. Indexer API URL (e.g. http://138.201.57.139:3005)
+CLICKHOUSE_URL=                        # Required. ClickHouse indexer API URL
 POLYMARKET_API_KEY=                    # Builder Program API key
 POLYMARKET_API_SECRET=                 # Builder Program secret (base64)
 POLYMARKET_PASSPHRASE=                 # Builder Program passphrase

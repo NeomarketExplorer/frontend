@@ -26,14 +26,19 @@ export function useEnableTrading(negRisk: boolean) {
       if (!ctfApproved) {
         await approveCTF();
       }
-      // Refetch balance + allowance after all approvals complete
+      // Force refetch balance + allowance after all approvals complete
       // Individual hooks already invalidate, but this ensures a final
-      // refresh after the entire batch so the UI reflects the new state
+      // refresh after the entire batch so the UI reflects the new state.
+      // Uses refetchQueries (not invalidateQueries) to wait for fresh data.
       if (address) {
-        await queryClient.invalidateQueries({ queryKey: ['usdc-balance', address] });
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: ['usdc-balance', address] }),
+          queryClient.refetchQueries({ queryKey: ['ctf-approval', address] }),
+        ]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to enable trading');
+      throw err;
     } finally {
       setIsEnabling(false);
     }
