@@ -36,6 +36,10 @@ export interface EnrichedPosition extends Position {
   marketClosed: boolean;
   /** The final resolution price (if resolved) */
   resolutionPrice: number | null;
+  /** Whether this is a neg-risk (multi-outcome) market */
+  negRisk: boolean;
+  /** Outcome token IDs [yes, no] — needed for neg-risk redemption */
+  outcomeTokenIds?: string[];
 
   // ClickHouse-only extras (optional; used to avoid hiding backend gaps).
   price_updated_at_ms?: number;
@@ -69,6 +73,7 @@ function enrichClickHousePositions(positions: ClickHousePosition[]): EnrichedPos
       outcomeName: p.outcome ?? (p.outcome_index === 0 ? 'Yes' : 'No'),
       marketClosed: false,
       resolutionPrice: null,
+      negRisk: false,
 
       price_updated_at_ms: p.price_updated_at_ms,
       categories: p.categories,
@@ -84,6 +89,8 @@ interface MarketInfo {
   outcomes: string[];
   closed: boolean;
   outcomePrices: number[];
+  negRisk: boolean;
+  outcomeTokenIds: string[];
 }
 
 /** Parse a Gamma market object into our MarketInfo shape. */
@@ -118,6 +125,12 @@ function parseGammaMarket(m: Record<string, unknown>): { cid: string; info: Mark
       outcomes,
       closed: m.closed === true,
       outcomePrices,
+      negRisk: m.negRisk === true,
+      outcomeTokenIds: Array.isArray(m.clobTokenIds)
+        ? (m.clobTokenIds as string[])
+        : typeof m.clobTokenIds === 'string'
+          ? (() => { try { return JSON.parse(m.clobTokenIds as string); } catch { return []; } })()
+          : [],
     },
   };
 }
@@ -131,6 +144,8 @@ function parseIndexerMarket(m: IndexerMarket): MarketInfo {
     outcomes: m.outcomes ?? ['Yes', 'No'],
     closed: m.closed === true,
     outcomePrices: m.outcomePrices ?? [],
+    negRisk: false,
+    outcomeTokenIds: m.outcomeTokenIds ?? [],
   };
 }
 
@@ -210,6 +225,8 @@ async function enrichPositionsWithMarketData(
       outcomeName: outcomes[p.outcome_index] ?? (p.outcome_index === 0 ? 'Yes' : 'No'),
       marketClosed: isClosed,
       resolutionPrice,
+      negRisk: market?.negRisk ?? false,
+      outcomeTokenIds: market?.outcomeTokenIds,
     };
   });
 }
@@ -238,7 +255,7 @@ export function usePositions() {
             if (p.marketQuestion) return p;
             const gp = gammaMap.get(p.asset);
             if (!gp) return p;
-            return { ...p, marketQuestion: gp.marketQuestion, marketId: gp.marketId, marketSlug: gp.marketSlug, outcomeName: gp.outcomeName, marketClosed: gp.marketClosed, resolutionPrice: gp.resolutionPrice };
+            return { ...p, marketQuestion: gp.marketQuestion, marketId: gp.marketId, marketSlug: gp.marketSlug, outcomeName: gp.outcomeName, marketClosed: gp.marketClosed, resolutionPrice: gp.resolutionPrice, negRisk: gp.negRisk, outcomeTokenIds: gp.outcomeTokenIds };
           });
         }
         return enriched;

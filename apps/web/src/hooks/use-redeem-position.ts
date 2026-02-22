@@ -1,11 +1,13 @@
 'use client';
 
 /**
- * Hook for redeeming resolved Polymarket positions via CTF redeemPositions().
- * Burns outcome tokens and pays out USDC for winning positions.
+ * Hook for redeeming resolved Polymarket positions.
  *
- * Uses the same wallet pattern as use-conditional-token-approval.ts:
- * Privy useWallets → getEthereumProvider → viem walletClient.writeContract
+ * Two redemption paths:
+ * - Standard markets: CTF redeemPositions(collateralToken, parentCollectionId, conditionId, indexSets)
+ * - Neg-risk markets:  NegRiskAdapter redeemPositions(conditionId, amounts[])
+ *
+ * The frontend detects neg-risk from Gamma API enrichment (negRisk flag on EnrichedPosition).
  */
 
 import { useState, useCallback } from 'react';
@@ -20,9 +22,10 @@ import { positionKeys } from './use-positions';
 
 const CTF_ADDRESS = CHAIN_CONFIG.polygon.ctf;
 const USDC_ADDRESS = CHAIN_CONFIG.polygon.usdc;
+const NEG_RISK_ADAPTER = CHAIN_CONFIG.polygon.negRiskAdapter;
 const PARENT_COLLECTION_ID = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
 
-const REDEEM_POSITIONS_ABI = [{
+const CTF_REDEEM_ABI = [{
   name: 'redeemPositions',
   type: 'function',
   stateMutability: 'nonpayable',
@@ -35,8 +38,37 @@ const REDEEM_POSITIONS_ABI = [{
   outputs: [],
 }] as const;
 
+const NEG_RISK_REDEEM_ABI = [{
+  name: 'redeemPositions',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { name: '_conditionId', type: 'bytes32' },
+    { name: '_amounts', type: 'uint256[]' },
+  ],
+  outputs: [],
+}] as const;
+
+const BALANCE_OF_ABI = [{
+  name: 'balanceOf',
+  type: 'function',
+  stateMutability: 'view',
+  inputs: [
+    { name: 'account', type: 'address' },
+    { name: 'id', type: 'uint256' },
+  ],
+  outputs: [{ name: '', type: 'uint256' }],
+}] as const;
+
+interface RedeemParams {
+  conditionId: string;
+  negRisk: boolean;
+  /** Outcome token IDs [yes, no] — required for neg-risk to read on-chain balances */
+  outcomeTokenIds?: string[];
+}
+
 interface UseRedeemPositionResult {
-  redeem: (conditionId: string) => Promise<string>;
+  redeem: (params: RedeemParams) => Promise<string>;
   isPending: boolean;
   error: string | null;
   txHash: string | null;
@@ -51,7 +83,7 @@ export function useRedeemPosition(): UseRedeemPositionResult {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
-  const redeem = useCallback(async (conditionId: string): Promise<string> => {
+  const redeem = useCallback(async (params: RedeemParams): Promise<string> => {
     if (!address) {
       throw new Error('Wallet not connected');
     }
@@ -77,22 +109,59 @@ export function useRedeemPosition(): UseRedeemPositionResult {
       });
 
       // Validate and normalize conditionId to bytes32
-      const conditionIdHex = conditionId.startsWith('0x') ? conditionId : `0x${conditionId}`;
+      const conditionIdHex = params.conditionId.startsWith('0x') ? params.conditionId : `0x${params.conditionId}`;
       if (conditionIdHex.length !== 66) {
         throw new Error(`Invalid conditionId: expected 66 hex chars, got ${conditionIdHex.length}`);
       }
 
-      const hash = await walletClient.writeContract({
-        address: CTF_ADDRESS,
-        abi: REDEEM_POSITIONS_ABI,
-        functionName: 'redeemPositions',
-        args: [
-          USDC_ADDRESS,
-          PARENT_COLLECTION_ID,
-          conditionIdHex as `0x${string}`,
-          [1n, 2n], // Binary market index sets: YES=0b01, NO=0b10
-        ],
-      });
+      let hash: `0x${string}`;
+
+      if (params.negRisk) {
+        // Neg-risk: call NegRiskAdapter.redeemPositions(conditionId, amounts[])
+        // Read on-chain balances for each outcome token to get exact amounts
+        const tokenIds = params.outcomeTokenIds ?? [];
+        if (tokenIds.length === 0) {
+          throw new Error('Outcome token IDs required for neg-risk redemption');
+        }
+
+        const amounts = await Promise.all(
+          tokenIds.map((tokenId) =>
+            publicClient.readContract({
+              address: CTF_ADDRESS,
+              abi: BALANCE_OF_ABI,
+              functionName: 'balanceOf',
+              args: [address as `0x${string}`, BigInt(tokenId)],
+            })
+          )
+        );
+
+        if (amounts.every((a) => a === 0n)) {
+          throw new Error('No tokens to redeem (balance is zero)');
+        }
+
+        hash = await walletClient.writeContract({
+          address: NEG_RISK_ADAPTER,
+          abi: NEG_RISK_REDEEM_ABI,
+          functionName: 'redeemPositions',
+          args: [
+            conditionIdHex as `0x${string}`,
+            amounts,
+          ],
+        });
+      } else {
+        // Standard: call CTF.redeemPositions(collateralToken, parentCollectionId, conditionId, indexSets)
+        hash = await walletClient.writeContract({
+          address: CTF_ADDRESS,
+          abi: CTF_REDEEM_ABI,
+          functionName: 'redeemPositions',
+          args: [
+            USDC_ADDRESS,
+            PARENT_COLLECTION_ID,
+            conditionIdHex as `0x${string}`,
+            [1n, 2n], // Binary market index sets: YES=0b01, NO=0b10
+          ],
+        });
+      }
 
       setTxHash(hash);
 

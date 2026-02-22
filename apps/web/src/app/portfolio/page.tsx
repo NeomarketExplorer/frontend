@@ -72,7 +72,7 @@ function PortfolioConnectPrompt() {
   );
 }
 
-type TabId = 'positions' | 'activity' | 'orders';
+type TabId = 'positions' | 'redemptions' | 'activity' | 'orders';
 
 function PortfolioContent({
   address,
@@ -95,6 +95,7 @@ function PortfolioContent({
 }) {
   const [activeTab, setActiveTab] = useState<TabId>('positions');
   const { data: openOrders, isLoading: ordersLoading } = useOpenOrders();
+  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions();
   const cancelOrder = useCancelOrder({
     onSuccess: (orderId) => {
       toast({ variant: 'success', title: 'Order cancelled', description: `Order ${orderId.slice(0, 8)}...` });
@@ -104,8 +105,16 @@ function PortfolioContent({
     },
   });
 
+  // Claimable positions: market closed, winning outcome, still holds tokens
+  const claimablePositions = resolvedPositions?.filter((p) => {
+    const resolutionPrice = p.resolutionPrice;
+    const isWin = resolutionPrice != null && resolutionPrice > 0.5;
+    return p.marketClosed && isWin && p.size > 0;
+  });
+
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: 'positions', label: 'Positions', count: positions?.length },
+    { id: 'redemptions', label: 'Redemptions', count: claimablePositions?.length },
     { id: 'activity', label: 'Activity' },
     { id: 'orders', label: 'Orders', count: openOrders?.length },
   ];
@@ -179,6 +188,9 @@ function PortfolioContent({
       {activeTab === 'positions' && (
         <PositionsTab positions={positions} loading={positionsLoading} />
       )}
+      {activeTab === 'redemptions' && (
+        <RedemptionsTab positions={resolvedPositions} loading={resolvedLoading} />
+      )}
       {activeTab === 'activity' && (
         <ActivityTab activity={activity} loading={activityLoading} />
       )}
@@ -230,7 +242,7 @@ function PositionsTab({
   loading: boolean;
 }) {
   const [subTab, setSubTab] = useState<PositionSubTab>('open');
-  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions({ enabled: subTab === 'resolved' });
+  const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions();
 
   return (
     <div className="space-y-4">
@@ -495,11 +507,15 @@ function ResolvedPositionsTable({
   const { redeem, isPending: isRedeeming } = useRedeemPosition();
   const [redeemingConditionId, setRedeemingConditionId] = useState<string | null>(null);
 
-  const handleClaim = async (conditionId: string, e: React.MouseEvent) => {
+  const handleClaim = async (position: EnrichedPosition, e: React.MouseEvent) => {
     e.stopPropagation(); // Don't navigate to market page
-    setRedeemingConditionId(conditionId);
+    setRedeemingConditionId(position.condition_id);
     try {
-      await redeem(conditionId);
+      await redeem({
+        conditionId: position.condition_id,
+        negRisk: position.negRisk,
+        outcomeTokenIds: position.outcomeTokenIds,
+      });
       toast({ variant: 'success', title: 'Position redeemed', description: 'USDC credited to your wallet' });
     } catch (err) {
       toast({ variant: 'error', title: 'Redemption failed', description: err instanceof Error ? err.message : 'Unknown error' });
@@ -598,7 +614,7 @@ function ResolvedPositionsTable({
                         <button
                           className="btn btn-primary font-mono text-xs"
                           disabled={isRedeeming}
-                          onClick={(e) => handleClaim(position.condition_id, e)}
+                          onClick={(e) => handleClaim(position, e)}
                         >
                           {isThisRedeeming ? (
                             <span className="flex items-center gap-1.5">
@@ -620,6 +636,166 @@ function ResolvedPositionsTable({
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function RedemptionsTab({
+  positions,
+  loading,
+}: {
+  positions: EnrichedPosition[] | undefined;
+  loading: boolean;
+}) {
+  const router = useRouter();
+  const { redeem, isPending: isRedeeming } = useRedeemPosition();
+  const [redeemingConditionId, setRedeemingConditionId] = useState<string | null>(null);
+
+  const handleClaim = async (position: EnrichedPosition, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRedeemingConditionId(position.condition_id);
+    try {
+      await redeem({
+        conditionId: position.condition_id,
+        negRisk: position.negRisk,
+        outcomeTokenIds: position.outcomeTokenIds,
+      });
+      toast({ variant: 'success', title: 'Position redeemed', description: 'USDC credited to your wallet' });
+    } catch (err) {
+      toast({ variant: 'error', title: 'Redemption failed', description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setRedeemingConditionId(null);
+    }
+  };
+
+  if (loading) return <PositionsLoadingSkeleton />;
+
+  // Filter to only claimable positions (market closed, winning outcome, still holds tokens)
+  const claimable = positions?.filter((p) => {
+    const resolutionPrice = p.resolutionPrice;
+    const isWin = resolutionPrice != null && resolutionPrice > 0.5;
+    return p.marketClosed && isWin && p.size > 0;
+  }) ?? [];
+
+  if (claimable.length === 0) {
+    return (
+      <div className="glass-card p-10 text-center">
+        <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
+          <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7 text-[var(--foreground-muted)]" stroke="currentColor" strokeWidth="2">
+            <path d="M9 12l2 2 4-4" />
+            <circle cx="12" cy="12" r="10" />
+          </svg>
+        </div>
+        <p className="font-mono text-sm text-[var(--foreground-muted)] mb-1">No pending redemptions.</p>
+        <p className="font-mono text-xs text-[var(--foreground-muted)]">
+          Winning positions from resolved markets will appear here for claiming.
+        </p>
+      </div>
+    );
+  }
+
+  const totalClaimable = claimable.reduce((sum, p) => sum + p.size * (p.resolutionPrice ?? 1), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="glass-card p-4 flex items-center justify-between">
+        <div>
+          <p className="font-mono text-[0.6rem] text-[var(--foreground-muted)] uppercase tracking-wider mb-1">
+            Total Claimable
+          </p>
+          <p className="font-mono font-bold text-lg text-[var(--success)]">
+            ~${totalClaimable.toFixed(2)} USDC
+          </p>
+        </div>
+        <span className="font-mono text-xs text-[var(--foreground-muted)]">
+          {claimable.length} position{claimable.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      <div className="glass-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="text-left">Market</th>
+                <th className="text-center w-16">Side</th>
+                <th className="text-right w-20">Shares</th>
+                <th className="text-right w-24">Entry Price</th>
+                <th className="text-right w-28">Payout</th>
+                <th className="text-right w-28">Profit</th>
+                <th className="text-right w-28">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {claimable.map((position, i) => {
+                const isYes = position.outcomeName.toLowerCase() === 'yes';
+                const avgPrice = position.avg_price ?? 0;
+                const costBasis = avgPrice * position.size;
+                const payout = position.size * (position.resolutionPrice ?? 1);
+                const profit = payout - costBasis;
+                const profitFormatted = formatPnlDollar(profit);
+                const marketLink = `/market/${position.marketId || position.condition_id}`;
+                const marketTitle = position.marketQuestion || `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`;
+                const isThisRedeeming = isRedeeming && redeemingConditionId === position.condition_id;
+
+                return (
+                  <tr
+                    key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
+                    className="market-row-item animate-fade-up group cursor-pointer"
+                    style={{ animationDelay: `${i * 40}ms` }}
+                    onClick={() => router.push(marketLink)}
+                  >
+                    <td>
+                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                        {marketTitle}
+                      </Link>
+                    </td>
+                    <td className="text-center">
+                      <span className={`tag ${isYes ? 'tag-success' : 'tag-danger'}`}>
+                        {position.outcomeName}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span className="font-mono text-sm">{position.size.toFixed(2)}</span>
+                    </td>
+                    <td className="text-right">
+                      <span className="font-mono text-sm text-[var(--foreground-muted)]">
+                        {(avgPrice * 100).toFixed(0)}c
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span className="font-mono text-sm font-bold text-[var(--success)]">
+                        ${payout.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span className={`font-mono text-sm font-bold ${profitFormatted.className}`}>
+                        {profitFormatted.text}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <button
+                        className="btn btn-primary font-mono text-xs"
+                        disabled={isRedeeming}
+                        onClick={(e) => handleClaim(position, e)}
+                      >
+                        {isThisRedeeming ? (
+                          <span className="flex items-center gap-1.5">
+                            <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            Claiming...
+                          </span>
+                        ) : (
+                          'Claim'
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
