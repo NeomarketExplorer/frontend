@@ -12,7 +12,7 @@ const PortfolioChart = dynamic(() => import('@/components/portfolio-chart').then
   loading: () => <div className="h-[300px] bg-muted/20 animate-pulse rounded" />,
 });
 import { Skeleton, toast } from '@app/ui';
-import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, useRedeemPosition, type EnrichedPosition } from '@/hooks';
+import { usePortfolio, usePositions, useResolvedPositions, useActivity, useOpenOrders, useCancelOrder, useRedeemPosition, useCompletedRedemptions, type EnrichedPosition, type CompletedRedemption } from '@/hooks';
 import { useWalletStore } from '@/stores';
 
 export default function PortfolioPage() {
@@ -96,6 +96,7 @@ function PortfolioContent({
   const [activeTab, setActiveTab] = useState<TabId>('positions');
   const { data: openOrders, isLoading: ordersLoading } = useOpenOrders();
   const { data: resolvedPositions, isLoading: resolvedLoading } = useResolvedPositions();
+  const { data: completedRedemptions, isLoading: completedRedemptionsLoading } = useCompletedRedemptions();
   const cancelOrder = useCancelOrder({
     onSuccess: (orderId) => {
       toast({ variant: 'success', title: 'Order cancelled', description: `Order ${orderId.slice(0, 8)}...` });
@@ -189,7 +190,12 @@ function PortfolioContent({
         <PositionsTab positions={positions} loading={positionsLoading} />
       )}
       {activeTab === 'redemptions' && (
-        <RedemptionsTab positions={resolvedPositions} loading={resolvedLoading} />
+        <RedemptionsTab
+          positions={resolvedPositions}
+          loading={resolvedLoading}
+          completedRedemptions={completedRedemptions}
+          completedLoading={completedRedemptionsLoading}
+        />
       )}
       {activeTab === 'activity' && (
         <ActivityTab activity={activity} loading={activityLoading} />
@@ -644,9 +650,13 @@ function ResolvedPositionsTable({
 function RedemptionsTab({
   positions,
   loading,
+  completedRedemptions,
+  completedLoading,
 }: {
   positions: EnrichedPosition[] | undefined;
   loading: boolean;
+  completedRedemptions: CompletedRedemption[] | undefined;
+  completedLoading: boolean;
 }) {
   const router = useRouter();
   const { redeem, isPending: isRedeeming } = useRedeemPosition();
@@ -678,7 +688,10 @@ function RedemptionsTab({
     return p.marketClosed && isWin && p.size > 0;
   }) ?? [];
 
-  if (claimable.length === 0) {
+  const hasClaimable = claimable.length > 0;
+  const hasCompleted = (completedRedemptions?.length ?? 0) > 0;
+
+  if (!hasClaimable && !hasCompleted && !completedLoading) {
     return (
       <div className="glass-card p-10 text-center">
         <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--card)] mb-4">
@@ -698,19 +711,146 @@ function RedemptionsTab({
   const totalClaimable = claimable.reduce((sum, p) => sum + p.size * (p.resolutionPrice ?? 1), 0);
 
   return (
-    <div className="space-y-4">
-      <div className="glass-card p-4 flex items-center justify-between">
-        <div>
-          <p className="font-mono text-[0.6rem] text-[var(--foreground-muted)] uppercase tracking-wider mb-1">
-            Total Claimable
-          </p>
-          <p className="font-mono font-bold text-lg text-[var(--success)]">
-            ~${totalClaimable.toFixed(2)} USDC
-          </p>
+    <div className="space-y-6">
+      {/* Section 1: Pending Claims */}
+      {hasClaimable && (
+        <div className="space-y-4">
+          <div className="glass-card p-4 flex items-center justify-between">
+            <div>
+              <p className="font-mono text-[0.6rem] text-[var(--foreground-muted)] uppercase tracking-wider mb-1">
+                Total Claimable
+              </p>
+              <p className="font-mono font-bold text-lg text-[var(--success)]">
+                ~${totalClaimable.toFixed(2)} USDC
+              </p>
+            </div>
+            <span className="font-mono text-xs text-[var(--foreground-muted)]">
+              {claimable.length} position{claimable.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="text-left">Market</th>
+                    <th className="text-center w-16">Side</th>
+                    <th className="text-right w-20">Shares</th>
+                    <th className="text-right w-24">Entry Price</th>
+                    <th className="text-right w-28">Payout</th>
+                    <th className="text-right w-28">Profit</th>
+                    <th className="text-right w-28">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claimable.map((position, i) => {
+                    const isYes = position.outcomeName.toLowerCase() === 'yes';
+                    const avgPrice = position.avg_price ?? 0;
+                    const costBasis = avgPrice * position.size;
+                    const payout = position.size * (position.resolutionPrice ?? 1);
+                    const profit = payout - costBasis;
+                    const profitFormatted = formatPnlDollar(profit);
+                    const marketLink = `/market/${position.marketId || position.condition_id}`;
+                    const marketTitle = position.marketQuestion || `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`;
+                    const isThisRedeeming = isRedeeming && redeemingConditionId === position.condition_id;
+
+                    return (
+                      <tr
+                        key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
+                        className="market-row-item animate-fade-up group cursor-pointer"
+                        style={{ animationDelay: `${i * 40}ms` }}
+                        onClick={() => router.push(marketLink)}
+                      >
+                        <td>
+                          <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                            {marketTitle}
+                          </Link>
+                        </td>
+                        <td className="text-center">
+                          <span className={`tag ${isYes ? 'tag-success' : 'tag-danger'}`}>
+                            {position.outcomeName}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <span className="font-mono text-sm">{position.size.toFixed(2)}</span>
+                        </td>
+                        <td className="text-right">
+                          <span className="font-mono text-sm text-[var(--foreground-muted)]">
+                            {(avgPrice * 100).toFixed(0)}c
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <span className="font-mono text-sm font-bold text-[var(--success)]">
+                            ${payout.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <span className={`font-mono text-sm font-bold ${profitFormatted.className}`}>
+                            {profitFormatted.text}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <button
+                            className="btn btn-primary font-mono text-xs"
+                            disabled={isRedeeming}
+                            onClick={(e) => handleClaim(position, e)}
+                          >
+                            {isThisRedeeming ? (
+                              <span className="flex items-center gap-1.5">
+                                <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                Claiming...
+                              </span>
+                            ) : (
+                              'Claim'
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <span className="font-mono text-xs text-[var(--foreground-muted)]">
-          {claimable.length} position{claimable.length !== 1 ? 's' : ''}
-        </span>
+      )}
+
+      {/* Separator between sections */}
+      {hasClaimable && (hasCompleted || completedLoading) && (
+        <div className="border-t border-[var(--border)]" />
+      )}
+
+      {/* Section 2: Completed Redemptions */}
+      {completedLoading ? (
+        <PositionsLoadingSkeleton />
+      ) : hasCompleted ? (
+        <CompletedRedemptionsSection redemptions={completedRedemptions!} />
+      ) : null}
+    </div>
+  );
+}
+
+function CompletedRedemptionsSection({ redemptions }: { redemptions: CompletedRedemption[] }) {
+  const totalRedeemed = redemptions.reduce((sum, r) => sum + r.totalPayout, 0);
+
+  function formatDate(dateStr: string): string {
+    const d = new Date(dateStr);
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    const diffDays = Math.floor(diffMs / 86_400_000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-xs text-[var(--foreground-muted)]">
+          {redemptions.length} previously redeemed — <span className="text-[var(--success)]">${totalRedeemed.toFixed(2)}</span> total
+        </p>
       </div>
 
       <div className="glass-card overflow-hidden">
@@ -719,54 +859,39 @@ function RedemptionsTab({
             <thead>
               <tr>
                 <th className="text-left">Market</th>
-                <th className="text-center w-16">Side</th>
-                <th className="text-right w-20">Shares</th>
-                <th className="text-right w-24">Entry Price</th>
-                <th className="text-right w-28">Payout</th>
-                <th className="text-right w-28">Profit</th>
-                <th className="text-right w-28">Action</th>
+                <th className="text-right w-24">Payout</th>
+                <th className="text-right w-28">Cost Basis</th>
+                <th className="text-right w-24">Profit</th>
+                <th className="text-right w-24">Date</th>
+                <th className="text-right w-28">Tx</th>
               </tr>
             </thead>
             <tbody>
-              {claimable.map((position, i) => {
-                const isYes = position.outcomeName.toLowerCase() === 'yes';
-                const avgPrice = position.avg_price ?? 0;
-                const costBasis = avgPrice * position.size;
-                const payout = position.size * (position.resolutionPrice ?? 1);
-                const profit = payout - costBasis;
-                const profitFormatted = formatPnlDollar(profit);
-                const marketLink = `/market/${position.marketId || position.condition_id}`;
-                const marketTitle = position.marketQuestion || `${position.condition_id.slice(0, 10)}...${position.condition_id.slice(-6)}`;
-                const isThisRedeeming = isRedeeming && redeemingConditionId === position.condition_id;
+              {redemptions.map((r, i) => {
+                const profitFormatted = formatPnlDollar(r.realizedPnl);
+                const marketTitle = r.marketQuestion || `${r.conditionId.slice(0, 10)}...${r.conditionId.slice(-6)}`;
+                const marketLink = r.marketSlug ? `/market/${r.marketSlug}` : `/market/${r.conditionId}`;
+                const txLink = `https://polygonscan.com/tx/${r.txHash}`;
 
                 return (
                   <tr
-                    key={position.asset ?? `${position.condition_id}-${position.outcome_index}`}
-                    className="market-row-item animate-fade-up group cursor-pointer"
+                    key={r.conditionId}
+                    className="market-row-item animate-fade-up"
                     style={{ animationDelay: `${i * 40}ms` }}
-                    onClick={() => router.push(marketLink)}
                   >
                     <td>
-                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                      <Link href={marketLink} className="line-clamp-2 text-sm font-medium hover:text-[var(--accent)] transition-colors">
                         {marketTitle}
                       </Link>
                     </td>
-                    <td className="text-center">
-                      <span className={`tag ${isYes ? 'tag-success' : 'tag-danger'}`}>
-                        {position.outcomeName}
-                      </span>
-                    </td>
                     <td className="text-right">
-                      <span className="font-mono text-sm">{position.size.toFixed(2)}</span>
+                      <span className="font-mono text-sm font-bold text-[var(--success)]">
+                        ${r.totalPayout.toFixed(2)}
+                      </span>
                     </td>
                     <td className="text-right">
                       <span className="font-mono text-sm text-[var(--foreground-muted)]">
-                        {(avgPrice * 100).toFixed(0)}c
-                      </span>
-                    </td>
-                    <td className="text-right">
-                      <span className="font-mono text-sm font-bold text-[var(--success)]">
-                        ${payout.toFixed(2)}
+                        ${r.totalCostBasis.toFixed(2)}
                       </span>
                     </td>
                     <td className="text-right">
@@ -775,20 +900,20 @@ function RedemptionsTab({
                       </span>
                     </td>
                     <td className="text-right">
-                      <button
-                        className="btn btn-primary font-mono text-xs"
-                        disabled={isRedeeming}
-                        onClick={(e) => handleClaim(position, e)}
+                      <span className="font-mono text-xs text-[var(--foreground-muted)]">
+                        {formatDate(r.redeemedAt)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <a
+                        href={txLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-[var(--accent)] hover:underline"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {isThisRedeeming ? (
-                          <span className="flex items-center gap-1.5">
-                            <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                            Claiming...
-                          </span>
-                        ) : (
-                          'Claim'
-                        )}
-                      </button>
+                        {r.txHash.slice(0, 6)}...{r.txHash.slice(-4)}
+                      </a>
                     </td>
                   </tr>
                 );
