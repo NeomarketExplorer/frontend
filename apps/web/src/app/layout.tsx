@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import localFont from 'next/font/local';
 import { QueryProvider } from '@/providers/query-provider';
 import { PrivyProvider } from '@/providers/privy-provider';
 import { ClobAuthProvider } from '@/providers/clob-auth-provider';
@@ -10,18 +10,18 @@ import { SearchTrigger, SearchDialog } from '@/components/search-dialog';
 import { LayoutShell, NavWrapper, MobileNav } from '@/components/layout-shell';
 import './globals.css';
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
+const spaceGrotesk = localFont({
+  src: '../../public/fonts/SpaceGrotesk-latin.woff2',
   display: 'swap',
   variable: '--font-space-grotesk',
-  weight: ['400', '500', '600', '700'],
+  weight: '400 700',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
+const jetbrainsMono = localFont({
+  src: '../../public/fonts/JetBrainsMono-latin.woff2',
   display: 'swap',
   variable: '--font-jetbrains-mono',
-  weight: ['400', '500', '600', '700'],
+  weight: '400 700',
 });
 
 export const metadata: Metadata = {
