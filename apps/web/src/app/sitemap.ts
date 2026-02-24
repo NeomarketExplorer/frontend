@@ -2,6 +2,9 @@ import type { MetadataRoute } from 'next';
 
 const BASE_URL = 'https://neomarket.bet';
 
+// Force dynamic — sitemap needs runtime INDEXER_URL, not available at build time
+export const dynamic = 'force-dynamic';
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const INDEXER_URL = process.env.INDEXER_URL;
 
@@ -14,11 +17,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/portfolio`, changeFrequency: 'daily', priority: 0.5 },
   ];
 
+  if (!INDEXER_URL) return staticPages;
+
   // Dynamic: fetch events and markets from indexer
   try {
     const [eventsRes, marketsRes] = await Promise.allSettled([
-      fetch(`${INDEXER_URL}/events?limit=500&active=true`).then(r => r.json()),
-      fetch(`${INDEXER_URL}/markets?limit=500&active=true`).then(r => r.json()),
+      fetch(`${INDEXER_URL}/events?limit=500&active=true`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+      fetch(`${INDEXER_URL}/markets?limit=500&active=true`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
     ]);
 
     const eventPages: MetadataRoute.Sitemap = [];
