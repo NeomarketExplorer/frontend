@@ -5,7 +5,7 @@
 
 const isServer = typeof window === 'undefined';
 const CLICKHOUSE_URL = isServer
-  ? (process.env.CLICKHOUSE_URL ?? (() => { throw new Error('CLICKHOUSE_URL env var is required'); })())
+  ? (process.env.CLICKHOUSE_URL ?? 'http://127.0.0.1:3002')
   : '/api/clickhouse';
 
 // ---------------------------------------------------------------------------
