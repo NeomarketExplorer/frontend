@@ -220,7 +220,7 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
               const depthWidth = (level.cumSize / maxCumulative) * 100;
               return (
                 <div
-                  key={`ask-${i}-${flash ? flashId : 'stable'}`}
+                  key={`ask-${level.price}-${flash ? flashId : 'stable'}`}
                   className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
                 >
                   <div
@@ -255,7 +255,7 @@ export function OrderbookPanel({ orderbook, midpoint, isLoading, isError }: Orde
               const depthWidth = (level.cumSize / maxCumulative) * 100;
               return (
                 <div
-                  key={`bid-${i}-${flash ? flashId : 'stable'}`}
+                  key={`bid-${level.price}-${flash ? flashId : 'stable'}`}
                   className={`flex items-center px-2 py-[2px] text-xs font-mono relative ${flash ? `flash-${flash}` : ''}`}
                 >
                   <div

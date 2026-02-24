@@ -93,7 +93,7 @@ export function LeaderboardExplainDialog({
                 </thead>
                 <tbody>
                   {data.events.map((evt, i) => (
-                    <ExplainRow key={`${evt.conditionId}-${evt.txHash}-${i}`} event={evt} />
+                    <ExplainRow key={`${evt.conditionId}-${evt.txHash}`} event={evt} />
                   ))}
                 </tbody>
               </table>
