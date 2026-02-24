@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL;
-if (!CLICKHOUSE_URL) throw new Error('CLICKHOUSE_URL env var is required');
-
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
+  const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL;
+  if (!CLICKHOUSE_URL) {
+    return NextResponse.json({ error: 'CLICKHOUSE_URL env var is not configured' }, { status: 500 });
+  }
+
   try {
     const { path } = await context.params;
     const pathname = '/' + path.join('/');
